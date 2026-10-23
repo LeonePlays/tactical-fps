@@ -33,3 +33,7 @@ Thumbs.db
 # Editor settings
 .vscode/
 .idea/
+
+# Browser test reports
+playwright-report/
+test-results/
