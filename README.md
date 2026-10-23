@@ -1,4 +1,4 @@
-# J.A.R.V.I.S. TACTICAL FPS
+# TACTICAL FPS
 
 **FPS Tático 3D | Browser Game | Em Desenvolvimento**
 
@@ -6,7 +6,7 @@
 
 ## Sobre o projeto
 
-**J.A.R.V.I.S. TACTICAL FPS** é um projeto independente de jogo de tiro tático em primeira pessoa, desenvolvido para navegadores.
+**TACTICAL FPS** é um projeto independente de jogo de tiro tático em primeira pessoa, desenvolvido para navegadores.
 
 Inspirado em jogos clássicos como Counter-Strike 1.6 e Rainbow Six: Vegas, o projeto busca combinar partidas rápidas, movimentação tática, mapas tridimensionais e diferentes modos de jogo.
 
@@ -65,4 +65,4 @@ Componentes de terceiros permanecem sujeitos às respectivas licenças.
 
 ---
 
-**J.A.R.V.I.S. TACTICAL FPS — Independent Game Development Project**
+**TACTICAL FPS — Independent Game Development Project**
