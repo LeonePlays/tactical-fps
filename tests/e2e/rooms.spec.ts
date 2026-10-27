@@ -40,3 +40,21 @@ test('two browsers share an arena with bots and can return to individual trainin
   }
   await page.locator('#disconnect-room').click();
 });
+
+test('bots run in this browser without a WebSocket server', async ({ page }) => {
+  await accountFixture(page);
+  let sockets = 0;
+  page.on('websocket', () => sockets++);
+  await page.goto('/');
+  await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
+  await page.locator('#local-bots').click();
+  await expect(page.locator('#hud')).toHaveAttribute('data-room', 'LOCAL');
+  await expect(page.locator('#hud')).toHaveAttribute('data-actors', '3');
+  await page.locator('#start-button').click();
+  await expect(page.locator('#hud')).toBeVisible();
+  await expect(page.locator('.hud-top-left strong')).toContainText('LOCAL');
+  await page.keyboard.press('2');
+  await expect(page.locator('.hud-ammo .label')).toHaveText('PISTOLA P-09');
+  await page.screenshot({ path: '/tmp/tactical-local-bots.png' });
+  expect(sockets).toBe(0);
+});

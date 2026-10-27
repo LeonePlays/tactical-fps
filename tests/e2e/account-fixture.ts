@@ -33,6 +33,9 @@ export async function accountFixture(
       if (route.request().method() === 'PUT')
         Object.assign(user.user_metadata, route.request().postDataJSON().data || {});
       await route.fulfill({ json: user });
+    } else if (path.endsWith('/signup')) {
+      Object.assign(user.user_metadata, route.request().postDataJSON().data || {});
+      await route.fulfill({ json: { ...session, user } });
     } else if (path.endsWith('/token')) await route.fulfill({ json: { ...session, user } });
     else await route.fulfill({ json: {} });
   });

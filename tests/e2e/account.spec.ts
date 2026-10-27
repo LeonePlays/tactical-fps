@@ -7,7 +7,7 @@ test('login gates training and logout removes access', async ({ page }) => {
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
   await page.locator('#start-button').evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator('#hud')).toBeHidden();
-  await page.getByLabel('E-mail', { exact: true }).fill('test@example.com');
+  await page.getByLabel('Usuário / e-mail', { exact: true }).fill('test@example.com');
   await page.getByLabel('Senha', { exact: true }).fill('test-password');
   await page.getByRole('button', { name: 'ENTRAR', exact: true }).click();
   await expect(page.locator('.account-overlay')).toBeHidden();
@@ -45,5 +45,28 @@ test('recovery link asks for a new password', async ({ page }) => {
   );
   await page.getByRole('button', { name: 'SALVAR NOVA SENHA' }).click();
   expect((await update).postDataJSON().password).toBe('new-test-password');
+  await expect(page.locator('.account-overlay')).toBeHidden();
+});
+
+test('signup has username rules, returns to login, and a later visit restores the session', async ({
+  page,
+}) => {
+  await accountFixture(page, false);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'CADASTRAR', exact: true }).click();
+  await page.getByLabel('E-mail', { exact: true }).fill('test@example.com');
+  await page.getByLabel('Nome de usuário', { exact: true }).fill('test_player');
+  await page.getByLabel('Senha', { exact: true }).fill('test-password');
+  const signup = page.waitForRequest('**/signup*');
+  await page.locator('#account-form button[type=submit]').click();
+  expect((await signup).postDataJSON().data.username).toBe('test_player');
+  await expect(page.locator('#account-title')).toHaveText('LOGAR');
+  await expect(page.locator('#account-message')).toContainText('Conta criada');
+  await expect(page.locator('.account-overlay')).toBeVisible();
+  await page.getByLabel('Usuário / e-mail', { exact: true }).fill('test@example.com');
+  await page.getByLabel('Senha', { exact: true }).fill('test-password');
+  await page.getByRole('button', { name: 'ENTRAR', exact: true }).click();
+  await expect(page.locator('.account-overlay')).toBeHidden();
+  await page.reload();
   await expect(page.locator('.account-overlay')).toBeHidden();
 });

@@ -10,10 +10,10 @@
 
 ## Dependências externas pendentes
 
-- Configurar SMTP e URLs de confirmação/recuperação no Supabase.
+- Desativar Confirm email, aplicar a migração de usernames e publicar username-login; ver `supabase/README.md`. SMTP é necessário para recuperar senha, não para cadastrar sem confirmação.
 - Tornar o endereço Vercel público; validar em janela anônima.
 - Validar autenticação com e-mail real: testes automatizados usam interceptação da API.
-- Publicar depois o servidor local de partidas; veja `server/README.md`. A Vercel estática não executa esse processo.
+- Bots individuais já rodam no navegador; publicar depois o servidor para salas entre jogadores, conforme `server/README.md`. A Vercel estática não executa esse processo.
 - Confirmar CI e deployment pelo GitHub/Vercel; a rede do ambiente retornou 403 nas consultas HTTP/API. O push Git funcionou.
 
 ## Escopo ainda não implementado

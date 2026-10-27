@@ -1,3 +1,4 @@
+import { localPractice } from './network/local';
 import type { MatchState } from './network/protocol';
 import { connectRoom } from './network/connection';
 import { WEAPONS } from './game/ballistics';
@@ -10,6 +11,10 @@ import type { Game, GameSnapshot } from './game/game';
 const root = document.querySelector<HTMLElement>('#app');
 if (!root) throw new Error('App root is missing');
 renderView(root);
+const buildBadge = document.createElement('span');
+buildBadge.className = 'build-badge';
+buildBadge.textContent = 'BETA · CONTAS + BOTS LOCAIS · 27/10';
+document.querySelector('.menu-footer')!.append(buildBadge);
 const el = <T extends HTMLElement = HTMLElement>(id: string) => {
   const node = document.getElementById(id);
   if (!node) throw new Error(`Required interface element is missing: ${id}`);
@@ -30,10 +35,11 @@ let roomConnection: ReturnType<typeof connectRoom> | undefined;
 let connecting = false;
 let roomReady = false;
 let currentRoom = '';
+let localMode = false;
 let latestRoom: MatchState | undefined;
 const lobby = document.createElement('section');
 lobby.className = 'local-lobby';
-lobby.innerHTML = `<details><summary>SALAS COM JOGADORES E BOTS</summary><p>Inicie o servidor local para criar uma sala. Cada jogador precisa de uma conta.</p><label>Servidor <input id="room-server" aria-label="Servidor de partidas" value="ws://127.0.0.1:3001" maxlength="200"></label><label>Bots <select id="room-bots"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label><button id="create-room" class="button secondary">CRIAR SALA</button><label>Código <input id="room-code" maxlength="6" placeholder="ABC123"></label><button id="join-room" class="button secondary">ENTRAR NA SALA</button><button id="disconnect-room" class="button text-button">VOLTAR AO TREINO INDIVIDUAL</button><p id="room-message" role="status"></p></details>`;
+lobby.innerHTML = `<button id="local-bots" class="button primary">JOGAR COM BOTS NESTE COMPUTADOR</button><details><summary>SALAS COM JOGADORES E BOTS</summary><p>Inicie o servidor local para criar uma sala. Cada jogador precisa de uma conta.</p><label>Servidor <input id="room-server" aria-label="Servidor de partidas" value="ws://127.0.0.1:3001" maxlength="200"></label><label>Bots <select id="room-bots"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label><button id="create-room" class="button secondary">CRIAR SALA</button><label>Código <input id="room-code" maxlength="6" placeholder="ABC123"></label><button id="join-room" class="button secondary">ENTRAR NA SALA</button><button id="disconnect-room" class="button text-button">VOLTAR AO TREINO INDIVIDUAL</button><p id="room-message" role="status"></p></details>`;
 document.querySelector('.hero')!.append(lobby);
 el<HTMLInputElement>('room-server').value =
   import.meta.env.VITE_MATCH_SERVER_URL || 'ws://127.0.0.1:3001';
@@ -186,7 +192,8 @@ async function enterGame(fresh = false): Promise<void> {
     }
     inSession = true;
     await game.enter();
-    el('pause-message').textContent = roomReady ? 'A partida continua online durante a pausa.' : '';
+    el('pause-message').textContent =
+      roomReady && !localMode ? 'A partida continua online durante a pausa.' : '';
   } catch {
     inSession = wasInSession;
     onLockChange(false);
@@ -301,21 +308,22 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-async function joinRoom(create: boolean) {
+async function joinRoom(create: boolean, local = false) {
   if (!account.canPlay || connecting || roomConnection) return;
   connecting = true;
+  localMode = local;
   el('room-message').textContent = 'Conectando…';
   try {
     const token = await account.token();
     if (!token) throw new Error('Entre novamente na conta.');
     const { Game: GameClass } = await import('./game/game');
-    roomConnection = connectRoom({
+    const options = {
       url: el<HTMLInputElement>('room-server').value,
       token,
       create,
       bots: Number(el<HTMLSelectElement>('room-bots').value),
       room: el<HTMLInputElement>('room-code').value.trim().toUpperCase(),
-      state: (state) => {
+      state: (state: MatchState) => {
         if (!roomReady) {
           game?.dispose();
           game = new GameClass(
@@ -342,7 +350,9 @@ async function joinRoom(create: boolean) {
           roomReady = true;
           currentRoom = state.room;
           startLabel.textContent = 'ENTRAR NA ARENA';
-          el('pause-message').textContent = 'A partida continua online durante a pausa.';
+          el('pause-message').textContent = local
+            ? 'Treino com bots pausado.'
+            : 'A partida continua online durante a pausa.';
         }
         connecting = false;
         latestRoom = state;
@@ -350,8 +360,9 @@ async function joinRoom(create: boolean) {
         hud.dataset.actors = String(state.actors.length);
         game?.applyMatch(state);
         const own = state.actors.find((a) => a.id === state.self);
-        el('room-message').textContent =
-          `SALA ${state.room} · ${state.actors.filter((a) => !a.bot).length} jogadores · ${state.actors.filter((a) => a.bot).length} bots. Compartilhe o código.`;
+        el('room-message').textContent = local
+          ? `TREINO COM ${state.actors.filter((a) => a.bot).length} BOTS · neste computador, sem servidor de salas.`
+          : `SALA ${state.room} · ${state.actors.filter((a) => !a.bot).length} jogadores · ${state.actors.filter((a) => a.bot).length} bots. Compartilhe o código.`;
         document.querySelector('.health-icon + strong')!.firstChild!.textContent = String(
           own?.health || 0,
         );
@@ -363,7 +374,7 @@ async function joinRoom(create: boolean) {
         document.querySelector('.hud-top-left .label')!.textContent = 'COMBATE LIVRE';
         if (own?.health === 0) el('training-tip').hidden = false;
       },
-      closed: (message) => {
+      closed: (message: string) => {
         connecting = false;
         game?.pause();
         inSession = false;
@@ -373,12 +384,14 @@ async function joinRoom(create: boolean) {
         el('room-message').textContent = message;
         startButton.disabled = true;
       },
-    });
+    };
+    roomConnection = local ? localPractice(options.bots, options.state) : connectRoom(options);
   } catch (error) {
     connecting = false;
     el('room-message').textContent = error instanceof Error ? error.message : 'Falha ao conectar.';
   }
 }
+el('local-bots').addEventListener('click', () => void joinRoom(true, true));
 el('create-room').addEventListener('click', () => void joinRoom(true));
 el('join-room').addEventListener('click', () => void joinRoom(false));
 el('disconnect-room').addEventListener('click', () => {

@@ -199,6 +199,8 @@ export function createWorld(scene: Scene, arena = false): World {
         b.name === 'floor' ? ground : b.name.startsWith('crate') ? wood : concrete,
       );
     for (const { mesh } of staticMeshes) shadows.addShadowCaster(mesh);
+    for (const x of [-10, 0, 10]) block('gantry-column', x, 4.3, 15.6, 0.3, 2.4, 0.3, steel, false);
+    block('gantry-crossbeam', 0, 5.4, 15.6, 31, 0.3, 0.4, steel, false);
     sign('FERRO / ARENA LOCAL', 0, 3, 15.4, 8, 1.2);
     return { solids, targets: [], shadows, spawn: { x: -12, y: 0.05, z: -12 } };
   }

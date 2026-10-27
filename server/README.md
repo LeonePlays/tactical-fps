@@ -13,7 +13,7 @@ Em outro terminal:
 npm run dev
 ```
 
-Abra o frontend em `http://localhost:5173`, entre com uma conta Supabase confirmada e abra **SALAS COM JOGADORES E BOTS**. Use `ws://127.0.0.1:3001`, escolha 0–4 bots e clique em **CRIAR SALA**. Clique em **ENTRAR NA ARENA** para capturar o mouse. Compartilhe o código com outro navegador usando uma conta diferente. A conta só pode ocupar uma conexão por servidor. Para sair, volte ao menu e clique em **VOLTAR AO TREINO INDIVIDUAL**.
+Abra o frontend em `http://localhost:5173`, entre com uma conta Supabase válida e abra **SALAS COM JOGADORES E BOTS**. Use `ws://127.0.0.1:3001`, escolha 0–4 bots e clique em **CRIAR SALA**. Clique em **ENTRAR NA ARENA** para capturar o mouse. Compartilhe o código com outro navegador usando uma conta diferente. A conta só pode ocupar uma conexão por servidor. Para sair, volte ao menu e clique em **VOLTAR AO TREINO INDIVIDUAL**.
 
 A arena usa o mesmo conjunto de colisões no cliente e servidor. Bots laranja e jogadores azuis participam de combate livre, sem equipes; todos podem se atingir. A sala suporta até oito participantes **incluindo bots**. O servidor controla movimento, tiro, munição, recarga, dano, mortes, eliminações e reaparecimento após três segundos. Pausar libera o mouse, mas a partida continua e você pode receber dano. O placar não é persistido entre salas. A reserva de munição é ilimitada nesta versão.
 
@@ -57,3 +57,7 @@ Testes de integração usam sockets reais e um verificador injetado **somente pe
 Hospede um processo Node persistente com suporte a WebSocket (VPS, container ou serviço equivalente). A pasta inclui um `Dockerfile` na raiz; ele não foi validado com Docker neste ambiente. Instale dependências incluindo `tsx` e execute `npm run server`. Configure `HOST=0.0.0.0`, a porta do provedor, as origens públicas exatas e TLS/WSS no proxy da hospedagem. Configure `VITE_MATCH_SERVER_URL=wss://seu-servidor` no frontend e refaça o build Vercel.
 
 Um único processo mantém todas as salas em memória; não escale horizontalmente sem afinidade e coordenação de estado. Antes de abertura pública, validar carga, latência, segurança, expiração/reconexão, monitoramento e autenticação com contas reais. O servidor não foi publicado nesta entrega.
+
+## Bots sem servidor
+
+Para jogar sozinho, use **JOGAR COM BOTS NESTE COMPUTADOR** no menu. Esse modo simula a arena no navegador, pausa com ESC e não usa WebSocket. O servidor descrito acima é necessário para salas entre jogadores.

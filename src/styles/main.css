@@ -1136,3 +1136,17 @@ em {
 .local-lobby input {
   max-width: 235px;
 }
+
+.build-badge {
+  font: 10px monospace;
+  color: #c8e795;
+}
+.account-overlay nav {
+  display: flex;
+  gap: 16px;
+}
+#username-hint {
+  font-size: 11px;
+  color: #a9b6a5;
+  font-weight: normal;
+}

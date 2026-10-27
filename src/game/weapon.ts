@@ -34,6 +34,29 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
     mesh.renderingGroupId = 1;
     return mesh;
   };
+  const glove = new StandardMaterial('operator-gloves', scene);
+  glove.diffuseColor = Color3.FromHexString('#6d7059');
+  glove.specularColor.set(0.02, 0.02, 0.02);
+  part('trigger-hand', [0.09, 0.12, 0.12], [0.025, -0.16, -0.12], glove);
+  part('right-sleeve', [0.12, 0.11, 0.23], [0.04, -0.2, -0.27], grip).rotation.x = -0.35;
+  if (pistol) {
+    part('pistol-slide', [0.075, 0.075, 0.3], [0, 0.015, 0.03], metal);
+    part('pistol-frame', [0.065, 0.055, 0.24], [0, -0.045, 0.015], grip);
+    part('pistol-grip', [0.075, 0.16, 0.09], [0, -0.13, -0.065], grip).rotation.x = -0.22;
+    part('pistol-trigger-guard', [0.052, 0.025, 0.08], [0, -0.095, 0.03], metal);
+    part('pistol-front-sight', [0.012, 0.023, 0.02], [0, 0.065, 0.14], sight);
+    part('pistol-rear-sight', [0.055, 0.022, 0.025], [0, 0.065, -0.1], metal);
+    part('support-hand', [0.09, 0.095, 0.1], [-0.045, -0.135, -0.04], glove);
+    const flash = part('muzzle-flash', [0.09, 0.06, 0.12], [0, 0.015, 0.24], sight);
+    const fire = new StandardMaterial('pistol-muzzle-light', scene);
+    fire.emissiveColor.set(1, 0.65, 0.1);
+    fire.disableLighting = true;
+    flash.material = fire;
+    flash.setEnabled(false);
+    return root;
+  }
+  part('support-hand', [0.1, 0.1, 0.14], [-0.02, -0.07, 0.27], glove);
+  part('left-sleeve', [0.1, 0.11, 0.27], [-0.08, -0.16, 0.15], grip).rotation.z = -0.5;
   part('receiver', [0.09, 0.12, 0.38], [0, 0, 0], metal);
   part('handguard', [0.085, 0.09, 0.3], [0, 0, 0.3], grip);
   part('stock', [0.09, 0.15, 0.22], [0, -0.015, -0.24], grip);
@@ -60,19 +83,5 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
   fire.disableLighting = true;
   flash.material = fire;
   flash.setEnabled(false);
-  if (pistol) {
-    for (const mesh of root.getChildMeshes()) {
-      if (
-        ['stock', 'handguard', 'carbine-barrel', 'rail', 'front-sight', 'sight-dot'].includes(
-          mesh.name,
-        )
-      )
-        mesh.setEnabled(false);
-      else {
-        mesh.scaling.z *= 0.65;
-        mesh.position.z *= 0.65;
-      }
-    }
-  }
   return root;
 }

@@ -108,12 +108,12 @@ Copyright © 2026 LeonePlays. **All Rights Reserved — Proprietary Software.** 
 
 ## Contas e acesso público
 
-O cadastro/login é obrigatório para entrar no treino. Confirmação por e-mail, recuperação de senha e logout usam Supabase Auth. Configurações e resumo do último treino (acertos, disparos, duração, data) são pequenos documentos nos metadados da própria conta. Não é necessário SQL. O resumo é salvo ao pausar, reiniciar ou voltar ao menu; fechar abruptamente pode perder a última gravação. Não há histórico completo ou retomada da posição. Resultados são editáveis pelo cliente e não servem para ranking.
+O cadastro/login é obrigatório para entrar no treino. Cadastro, recuperação de senha e logout usam Supabase Auth. A confirmação de e-mail deve ser desativada pelo proprietário no painel. Configurações e resumo do último treino (acertos, disparos, duração, data) são pequenos documentos nos metadados da própria conta. Não é necessário SQL. O resumo é salvo ao pausar, reiniciar ou voltar ao menu; fechar abruptamente pode perder a última gravação. Não há histórico completo ou retomada da posição. Resultados são editáveis pelo cliente e não servem para ranking.
 
 O proprietário precisa configurar:
 
 1. Supabase → Authentication → URL Configuration: Site URL para o endereço definitivo; Redirect URLs incluindo esse endereço, preview e `http://localhost:5173/`.
-2. Supabase → Authentication: Email habilitado, confirmação de e-mail e SMTP próprio para envio a usuários públicos. O envio padrão é restrito; a chave publicável não permite alterar essas configurações.
+2. Supabase → Authentication: Email habilitado, Confirm email desativado e SMTP próprio para recuperação para envio a usuários públicos. O envio padrão é restrito; a chave publicável não permite alterar essas configurações.
 3. Vercel → Settings → Deployment Protection: tornar público o endereço compartilhado ou publicar em produção pública. Verificar em janela anônima que só aparece o login do TACTICAL FPS.
 4. Validar com e-mail real: cadastrar, confirmar, entrar, salvar ajustes, entrar em outro navegador e recuperar senha. Testes simulados não comprovam entrega de e-mails.
 
@@ -124,3 +124,9 @@ Primária automática e secundária semiautomática têm carregadores independen
 **Partidas locais:** crie ou entre numa sala com código, até oito participantes incluindo zero a quatro bots. Há arena compartilhada, dano, morte e reaparecimento controlados por servidor. Consulte [como iniciar e publicar o servidor](server/README.md). O servidor ainda não está hospedado; o preview Vercel sozinho não oferece partidas online.
 
 **Ainda pendentes:** faca, granadas, equipamentos, bomba e melhorias de IA, personagens e sincronização. Salas online exigem servidor de partidas separado da Vercel estática, simulação autoritativa e testes entre clientes; Supabase Auth não substitui esse servidor. Preserve o planejamento GDD 1.4 ao definir essas etapas.
+
+## Login e bots neste computador
+
+Use LOGAR com usuário/e-mail e senha. CADASTRAR solicita e-mail, username (3–20 letras, números ou _) e senha de pelo menos 8 caracteres; ao concluir, volta para LOGAR. A sessão é persistida pelo SDK. Veja [as configurações obrigatórias de contas](supabase/README.md) para desligar confirmação de e-mail e instalar a função de login por username. Não confundir guardar senha no gerenciador Google com login social Google.
+
+O botão **JOGAR COM BOTS NESTE COMPUTADOR** usa a simulação local no navegador e não exige iniciar/hospedar o servidor WebSocket. Escolha a quantidade no seletor Bots. A pausa interrompe essa simulação; salas multiplayer continuam exigindo servidor. Há carabina e pistola nas teclas 1/2, e a arena é distinta do Complexo Ferro do treino. O rodapé mostra `BETA · CONTAS + BOTS LOCAIS · 27/10` para reconhecer a versão atualizada.

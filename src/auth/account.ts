@@ -7,9 +7,11 @@ const client = createClient(
 export function mountAccount(change: (user: User | null, settings?: Settings) => void) {
   const shell = document.createElement('div');
   shell.className = 'overlay account-overlay';
-  shell.innerHTML = `<section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="account-title"><h2 id="account-title">SUA CONTA TACTICAL FPS</h2><p>Entre para jogar e salvar seus ajustes e o último treino.</p><form id="account-form"><label>E-mail<input name="email" type="email" autocomplete="email" required></label><label>Senha<input name="password" type="password" autocomplete="current-password" required></label><button class="button primary" type="submit">ENTRAR</button><button class="button secondary" type="button" data-mode="signup">CRIAR CONTA</button><button class="button text-button" type="button" data-mode="reset">ESQUECI A SENHA</button><button class="button text-button" type="button" data-mode="login">VOLTAR AO LOGIN</button><p id="account-message" role="status"></p><small>Seu e-mail, ajustes e último resultado ficam no Supabase. Em computador compartilhado, saia da conta ao terminar.</small></form></section>`;
+  shell.innerHTML = `<section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="account-title"><h2 id="account-title">LOGAR</h2><nav aria-label="Acesso à conta"><button class="button text-button" type="button" data-mode="login">LOGAR</button><button class="button text-button" type="button" data-mode="signup">CADASTRAR</button></nav><form id="account-form"><label id="identifier-row"><span id="identifier-label">Usuário / e-mail</span><input name="identifier" type="text" autocomplete="username" required maxlength="254" aria-labelledby="identifier-label"><small id="username-hint" hidden>3–20 caracteres: letras, números e _. Sem espaços.</small></label><label id="email-row">E-mail<input name="email" type="email" autocomplete="email" maxlength="254"></label><label>Senha<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label><button class="button primary" type="submit">ENTRAR</button><button class="button text-button" type="button" data-mode="reset">ESQUECI A SENHA</button><p id="account-message" role="status"></p><small>Sua sessão fica salva neste navegador. Em computador compartilhado, saia da conta ao terminar.</small></form></section>`;
   document.body.append(shell);
   const form = shell.querySelector('form')!;
+  const identifier = form.elements.namedItem('identifier') as HTMLInputElement;
+  let registering = false;
   const email = form.elements.namedItem('email') as HTMLInputElement;
   const password = form.elements.namedItem('password') as HTMLInputElement;
   const message = shell.querySelector('#account-message')!;
@@ -29,8 +31,19 @@ export function mountAccount(change: (user: User | null, settings?: Settings) =>
   const setMode = (next: string) => {
     mode = next;
     message.textContent = '';
-    email.required = next !== 'update';
-    email.parentElement!.hidden = next === 'update';
+    if (next === 'signup' || next === 'reset') form.prepend(email.parentElement!);
+    email.required = next === 'signup' || next === 'reset';
+    email.parentElement!.hidden = !email.required;
+    identifier.required = next === 'login' || next === 'signup';
+    identifier.parentElement!.hidden = !identifier.required;
+    identifier.pattern = next === 'signup' ? '[a-zA-Z0-9_]{3,20}' : '.*';
+    shell.querySelector('#identifier-label')!.textContent =
+      next === 'signup' ? 'Nome de usuário' : 'Usuário / e-mail';
+    shell.querySelector('#username-hint')!.toggleAttribute('hidden', next !== 'signup');
+    shell.querySelector('#account-title')!.textContent =
+      { login: 'LOGAR', signup: 'CADASTRAR', reset: 'RECUPERAR SENHA', update: 'NOVA SENHA' }[
+        next
+      ] || 'LOGAR';
     password.required = next !== 'reset';
     password.parentElement!.hidden = next === 'reset';
     password.minLength = next === 'signup' || next === 'update' ? 8 : 1;
@@ -41,6 +54,7 @@ export function mountAccount(change: (user: User | null, settings?: Settings) =>
       ] || 'ENTRAR';
   };
   const apply = (next: User | null) => {
+    if (registering) return;
     const changed = user?.id !== next?.id;
     user = next;
     shell.hidden = !!user && mode !== 'update';
@@ -62,7 +76,7 @@ export function mountAccount(change: (user: User | null, settings?: Settings) =>
     .getUser()
     .then(({ data, error }) => apply(error ? null : data.user))
     .catch(() => apply(null));
-  form.addEventListener('click', (event) => {
+  shell.addEventListener('click', (event) => {
     const button = (event.target as Element).closest<HTMLElement>('[data-mode]');
     if (button && !busy) setMode(button.dataset.mode!);
   });
@@ -74,37 +88,64 @@ export function mountAccount(change: (user: User | null, settings?: Settings) =>
     message.textContent = 'Aguarde…';
     try {
       const redirectTo = location.origin + location.pathname;
-      const response =
-        mode === 'signup'
-          ? await client.auth.signUp({
-              email: email.value.trim(),
-              password: password.value,
-              options: { emailRedirectTo: redirectTo },
-            })
-          : mode === 'reset'
-            ? await client.auth.resetPasswordForEmail(email.value.trim(), { redirectTo })
-            : mode === 'update'
-              ? await client.auth.updateUser({ password: password.value })
-              : await client.auth.signInWithPassword({
-                  email: email.value.trim(),
-                  password: password.value,
-                });
-      if (response.error) throw response.error;
-      message.textContent =
-        mode === 'signup'
-          ? 'Confira seu e-mail para confirmar o cadastro e depois entre.'
-          : mode === 'reset'
-            ? 'Se o e-mail estiver cadastrado, você receberá um link de recuperação.'
-            : '';
-      if (mode === 'update') {
+      if (mode === 'signup') {
+        registering = true;
+        const { data, error } = await client.auth.signUp({
+          email: email.value.trim(),
+          password: password.value,
+          options: {
+            data: { username: identifier.value.trim().toLowerCase() },
+            emailRedirectTo: redirectTo,
+          },
+        });
+        if (error) throw error;
+        if (data.session) {
+          const { error: signOutError } = await client.auth.signOut({ scope: 'local' });
+          if (signOutError) throw signOutError;
+        }
+        registering = false;
+        apply(null);
+        setMode('login');
+        message.textContent = data.session
+          ? 'Conta criada. Entre com seu usuário ou e-mail e senha.'
+          : 'Cadastro recebido, mas a confirmação de e-mail ainda está ativada no serviço. O administrador precisa desativá-la.';
+      } else if (mode === 'reset') {
+        const { error } = await client.auth.resetPasswordForEmail(email.value.trim(), {
+          redirectTo,
+        });
+        if (error) throw error;
+        message.textContent =
+          'Se o e-mail estiver cadastrado, você receberá um link de recuperação.';
+      } else if (mode === 'update') {
+        const { error } = await client.auth.updateUser({ password: password.value });
+        if (error) throw error;
         setMode('login');
         shell.hidden = !!user;
+      } else if (identifier.value.includes('@')) {
+        const { error } = await client.auth.signInWithPassword({
+          email: identifier.value.trim(),
+          password: password.value,
+        });
+        if (error) throw error;
+      } else {
+        const { data, error } = await client.functions.invoke('username-login', {
+          body: { username: identifier.value.trim().toLowerCase(), password: password.value },
+        });
+        if (error || !data?.access_token || !data?.refresh_token) throw new Error('USERNAME_LOGIN');
+        const { error: sessionError } = await client.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+        });
+        if (sessionError) throw sessionError;
       }
       password.value = '';
-    } catch {
+    } catch (error) {
       message.textContent =
-        'Não foi possível concluir. Confira os dados, a confirmação do e-mail e sua conexão. Aguarde se tentou várias vezes.';
+        error instanceof Error && error.message === 'USERNAME_LOGIN'
+          ? 'Não foi possível entrar por usuário. Confira os dados ou tente seu e-mail.'
+          : 'Não foi possível concluir. Confira os dados e sua conexão. O nome pode já estar em uso; aguarde se tentou várias vezes.';
     } finally {
+      registering = false;
       busy = false;
       submit.disabled = false;
     }
