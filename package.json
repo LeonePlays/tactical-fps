@@ -18,7 +18,8 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@babylonjs/core": "^8.0.0"
+    "@babylonjs/core": "^8.0.0",
+    "@supabase/supabase-js": "^2.118.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",

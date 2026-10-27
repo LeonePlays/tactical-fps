@@ -1,3 +1,5 @@
+import { WEAPONS } from './game/ballistics';
+import { mountAccount } from './auth/account';
 import './styles/main.css';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from './core/settings';
 import { renderView } from './ui/view';
@@ -27,6 +29,26 @@ let game: Game | undefined;
 let inSession = false;
 let entering = false;
 let previousFocus: HTMLElement | null = null;
+let latestSnapshot: GameSnapshot | undefined;
+const account = mountAccount((user, cloudSettings) => {
+  settings = cloudSettings || { ...DEFAULT_SETTINGS };
+  game?.applySettings(settings);
+  if (!user) {
+    inSession = false;
+    game?.showMenu();
+    hud.hidden = true;
+    pause.hidden = true;
+    menu.hidden = false;
+    settingsOverlay.hidden = true;
+    controlsOverlay.hidden = true;
+  }
+});
+function saveTraining() {
+  if (inSession && latestSnapshot) {
+    const { hits, shots, elapsed } = latestSnapshot;
+    account.save({ last_training: { hits, shots, elapsed, savedAt: new Date().toISOString() } });
+  }
+}
 let tipTimer: ReturnType<typeof setTimeout> | undefined;
 
 function announceError(message: string): void {
@@ -52,11 +74,16 @@ function onLockChange(locked: boolean): void {
       el('training-tip').hidden = true;
     }, 6500);
   } else if (inSession) {
+    saveTraining();
     pause.querySelector<HTMLButtonElement>('[data-action="resume"]')?.focus();
   }
 }
 
 function updateHud(state: GameSnapshot): void {
+  latestSnapshot = state;
+  document.querySelector('.hud-ammo .label')!.textContent = WEAPONS[state.weapon].name;
+  document.querySelector('.hud-ammo div > span')!.textContent =
+    `/ ${WEAPONS[state.weapon].capacity}`;
   el('ammo-count').textContent = String(state.ammo).padStart(2, '0');
   el('hit-count').textContent = String(state.hits).padStart(2, '0');
   el('accuracy').textContent = state.shots
@@ -84,6 +111,7 @@ function updateHud(state: GameSnapshot): void {
   el('fps-counter').hidden = !settings.showFps;
   el('hit-marker').hidden = !state.hit;
   // Read-only observability for browser regression tests and developer inspection.
+  hud.dataset.elapsed = String(state.elapsed);
   hud.dataset.position = JSON.stringify(state.position);
   hud.dataset.stance = state.stance;
   hud.dataset.grounded = String(state.grounded);
@@ -111,7 +139,7 @@ function openDialog(kind: 'settings' | 'controls'): void {
   const overlay = kind === 'settings' ? settingsOverlay : controlsOverlay;
   if (kind === 'settings') {
     fillSettings(settings);
-    settingsMessage.textContent = 'Os ajustes são salvos neste navegador.';
+    settingsMessage.textContent = 'Ajustes salvos na conta; confira o status no menu.';
   }
   overlay.hidden = false;
   (overlay.querySelector('button') as HTMLButtonElement)?.focus();
@@ -122,11 +150,14 @@ function closeDialog(kind: 'settings' | 'controls'): void {
 }
 
 async function enterGame(fresh = false): Promise<void> {
-  if (!game || entering) return;
+  if (!game || entering || !account.canPlay) return;
   entering = true;
   const wasInSession = inSession;
   try {
-    if (fresh) game.reset();
+    if (fresh) {
+      saveTraining();
+      game.reset();
+    }
     inSession = true;
     await game.enter();
     el('pause-message').textContent = '';
@@ -178,6 +209,7 @@ root.addEventListener('click', (event) => {
       startButton.focus();
       break;
     case 'leave':
+      saveTraining();
       inSession = false;
       game?.showMenu();
       hud.hidden = true;
@@ -201,6 +233,7 @@ form.addEventListener('submit', (event) => {
     showFps: input('showFps').checked,
   };
   game?.applySettings(settings);
+  account.save({ settings });
   if (saveSettings(settings)) {
     closeDialog('settings');
     startHelp.textContent = 'Ajustes salvos. Teclado + mouse · ESC para pausar';

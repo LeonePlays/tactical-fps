@@ -1,6 +1,8 @@
+import { accountFixture } from './account-fixture';
 import { expect, test, type Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  await accountFixture(page);
   await page.goto('/');
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40_000 });
 });
@@ -12,7 +14,18 @@ const position = (page: Page) =>
     .then((value) => JSON.parse(value!) as { x: number; y: number; z: number });
 async function hold(page: Page, key: string, milliseconds = 650) {
   await page.keyboard.down(key);
-  await page.waitForTimeout(milliseconds);
+  const elapsed = () =>
+    page
+      .locator('#hud')
+      .getAttribute('data-elapsed')
+      .then((value) => Number(value));
+  const started = await elapsed();
+  // Compare equal simulation time even when software WebGL renders slowly.
+  if (await page.locator('#hud').isVisible())
+    await expect
+      .poll(elapsed, { timeout: 20000, intervals: [25] })
+      .toBeGreaterThanOrEqual(started + milliseconds / 1000);
+  else await page.waitForTimeout(milliseconds);
   await page.keyboard.up(key);
 }
 async function start(page: Page) {
@@ -33,6 +46,7 @@ test('settings persist, controls are documented, and desktop identity is correct
   await page.getByRole('switch', { name: 'Mostrar FPS' }).check();
   await page.getByRole('button', { name: 'SALVAR AJUSTES' }).click();
   await expect(page.locator('#settings-overlay')).toBeHidden();
+  await expect(page.locator('#account-status')).toHaveText('DADOS SALVOS NA CONTA');
   await page.reload();
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40_000 });
   await page.getByRole('button', { name: 'Configurações', exact: true }).first().click();
@@ -109,7 +123,7 @@ test('WebGL scene is playable: pointer lock, targets, WASD, sprint, stances, jum
 test('map geometry blocks forward movement at the south gate', async ({ page }) => {
   await start(page);
   await page.keyboard.down('s');
-  await expect.poll(async () => (await position(page)).z, { timeout: 25_000 }).toBeLessThan(-29.8);
+  await expect.poll(async () => (await position(page)).z, { timeout: 25_000 }).toBeLessThan(-29.94);
   await page.keyboard.up('s');
   const stopped = await position(page);
   await hold(page, 's', 700);

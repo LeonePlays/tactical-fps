@@ -1,3 +1,4 @@
+import { WEAPONS, spread, type WeaponSlot } from './ballistics';
 import { Camera } from '@babylonjs/core/Cameras/camera';
 import { Engine } from '@babylonjs/core/Engines/engine';
 import { Ray } from '@babylonjs/core/Culling/ray';
@@ -12,6 +13,7 @@ import { createWeapon } from './weapon';
 import type { Settings } from '../core/settings';
 
 export interface GameSnapshot {
+  weapon: WeaponSlot;
   ammo: number;
   hits: number;
   shots: number;
@@ -36,7 +38,11 @@ export class Game {
   private readonly camera: UniversalCamera;
   private readonly menuCamera: UniversalCamera;
   private readonly world: World;
-  private readonly weapon: TransformNode;
+  private weapon: TransformNode;
+  private slot: WeaponSlot = 'primary';
+  private magazines = { primary: 30, secondary: 12 };
+  private heat = 0;
+  private flashUntil = 0;
   private readonly audio = new GameAudio();
   private body: PlayerBody;
   private settings: Settings;
@@ -156,6 +162,8 @@ export class Game {
         if (event.code === 'KeyZ')
           this.requestedStance = this.requestedStance === 'prone' ? 'standing' : 'prone';
         if (event.code === 'KeyR') this.reload();
+        if (event.code === 'Digit1') this.switchWeapon('primary');
+        if (event.code === 'Digit2') this.switchWeapon('secondary');
       },
       options,
     );
@@ -241,7 +249,10 @@ export class Game {
     this.yaw = 0;
     this.pitch = 0;
     this.elapsed = 0;
+    this.switchWeapon('primary');
+    this.magazines = { primary: 30, secondary: 12 };
     this.ammo = 30;
+    this.heat = 0;
     this.hits = 0;
     this.shots = 0;
     this.reloadUntil = 0;
@@ -275,9 +286,21 @@ export class Game {
     this.engine.resize();
   }
 
+  private switchWeapon(slot: WeaponSlot): void {
+    this.magazines[this.slot] = this.ammo;
+    this.slot = slot;
+    this.ammo = this.magazines[slot];
+    this.reloadUntil = 0;
+    this.trigger = false;
+    this.nextShotAt = this.elapsed + 0.25;
+    this.weapon.dispose();
+    this.weapon = createWeapon(this.scene, this.camera, slot === 'secondary');
+    this.emitSnapshot();
+  }
+
   private reload(): void {
-    if (this.reloadUntil || this.ammo === 30) return;
-    this.reloadUntil = this.elapsed + 1.7;
+    if (this.reloadUntil || this.ammo === WEAPONS[this.slot].capacity) return;
+    this.reloadUntil = this.elapsed + WEAPONS[this.slot].reload;
     this.audio.play('reload');
   }
 
@@ -289,10 +312,20 @@ export class Game {
     }
     this.ammo--;
     this.shots++;
-    this.nextShotAt = this.elapsed + 0.14;
+    const spec = WEAPONS[this.slot];
+    this.nextShotAt = this.elapsed + spec.interval;
+    if (!spec.automatic) this.trigger = false;
+    this.flashUntil = this.elapsed + 0.045;
     this.recoil = 1;
     this.audio.play('shot');
-    const direction = this.camera.getForwardRay().direction;
+    const aimSpread = spread(this.body.moving, this.body.grounded, this.body.stance, this.heat);
+    const direction = this.camera.getForwardRay().direction.clone();
+    direction.x += (Math.random() - 0.5) * aimSpread;
+    direction.y += (Math.random() - 0.5) * aimSpread;
+    direction.normalize();
+    this.heat = Math.min(6, this.heat + 1);
+    this.pitch = Math.max(-1.48, this.pitch - spec.kick);
+    this.yaw += (Math.random() - 0.5) * spec.kick * 0.35;
     const ray = new Ray(this.camera.globalPosition.clone(), direction, 100);
     const picked = this.scene.pickWithRay(
       ray,
@@ -330,7 +363,7 @@ export class Game {
       );
       this.syncCamera(1 - Math.exp(-18 * dt));
       if (this.reloadUntil && this.elapsed >= this.reloadUntil) {
-        this.ammo = 30;
+        this.ammo = WEAPONS[this.slot].capacity;
         this.reloadUntil = 0;
       }
       if (this.trigger) this.shoot();
@@ -341,6 +374,11 @@ export class Game {
           this.world.shadows.getShadowMap()?.resetRefreshCounter();
         }
       }
+      this.heat = Math.max(0, this.heat - dt * 4);
+      this.weapon
+        .getChildMeshes()
+        .find((mesh) => mesh.name === 'muzzle-flash')
+        ?.setEnabled(this.elapsed < this.flashUntil);
       this.recoil = Math.max(0, this.recoil - dt * 7);
       const bob =
         this.body.moving && this.body.grounded
@@ -371,6 +409,7 @@ export class Game {
 
   private emitSnapshot(): void {
     this.events.onSnapshot({
+      weapon: this.slot,
       ammo: this.ammo,
       hits: this.hits,
       shots: this.shots,

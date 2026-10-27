@@ -17,6 +17,29 @@ export class GameAudio {
     const ctx = this.context;
     const time = ctx.currentTime;
     const duration = kind === 'shot' ? 0.13 : kind === 'hit' ? 0.16 : 0.07;
+    if (kind === 'shot') {
+      const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.22), ctx.sampleRate);
+      const samples = buffer.getChannelData(0);
+      for (let i = 0; i < samples.length; i++)
+        samples[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.035));
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(5500, time);
+      filter.frequency.exponentialRampToValueAtTime(500, time + 0.2);
+      const level = ctx.createGain();
+      level.gain.value = this.volume * 0.55;
+      noise.connect(filter);
+      filter.connect(level);
+      level.connect(ctx.destination);
+      noise.start(time);
+      noise.onended = () => {
+        noise.disconnect();
+        filter.disconnect();
+        level.disconnect();
+      };
+    }
     const oscillator = ctx.createOscillator();
     const gain = ctx.createGain();
     oscillator.type = kind === 'shot' ? 'sawtooth' : 'triangle';
@@ -28,6 +51,10 @@ export class GameAudio {
     gain.connect(ctx.destination);
     oscillator.start(time);
     oscillator.stop(time + duration);
+    oscillator.onended = () => {
+      oscillator.disconnect();
+      gain.disconnect();
+    };
   }
 
   dispose(): void {

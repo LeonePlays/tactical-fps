@@ -23,7 +23,7 @@ npm ci
 npm run dev
 ```
 
-Abra o endereço exibido pelo Vite. Clique em **INICIAR TREINO** para capturar o mouse. O bloqueio do ponteiro exige uma interação do usuário e origem segura (HTTPS ou localhost). Pressione **ESC** para liberar o ponteiro e pausar.
+Abra o endereço exibido pelo Vite. Entre na conta e clique em **INICIAR TREINO** para capturar o mouse. O bloqueio do ponteiro exige uma interação do usuário e origem segura (HTTPS ou localhost). Pressione **ESC** para liberar o ponteiro e pausar.
 
 ```bash
 npm test              # Testes unitários de física e configurações
@@ -38,7 +38,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Em Linux com Chromium já instalado, é possível usar `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e`. Os testes verificam a versão de produção usando WebGL, captura real do ponteiro e eventos reais de teclado/mouse. Não há necessidade de banco de dados, backend, conta, chaves ou serviços externos nesta entrega.
+Em Linux com Chromium já instalado, é possível usar `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e`. Os testes verificam a versão de produção usando WebGL, captura real do ponteiro e eventos reais de teclado/mouse. Os testes de navegador simulam a API Supabase sem enviar e-mails. O jogo real exige uma conta e conexão com Supabase Auth.
 
 ## Controles
 
@@ -51,12 +51,13 @@ Em Linux com Chromium já instalado, é possível usar `PLAYWRIGHT_CHROMIUM_EXEC
 | Z               | Alternar deitado / em pé                              |
 | Espaço          | Saltar; indisponível deitado                          |
 | Clique esquerdo | Disparar; segure para fogo automático                 |
+| 1 / 2           | Trocar carabina / pistola                             |
 | R               | Recarregar (1,7 segundo; reserva ilimitada no treino) |
 | Esc             | Pausar e liberar o mouse                              |
 
 Tetos baixos impedem levantar; a postura solicitada é aplicada quando há espaço. As passagens de manutenção sinalizadas permitem praticar agachamento e posição deitado. Caixas baixas podem ser ultrapassadas com salto. A sessão pausa ao perder foco; use **CONTINUAR** para retornar.
 
-O menu de configurações oferece sensibilidade, campo de visão horizontal, volume, qualidade gráfica, inversão vertical e contador de FPS. Os ajustes persistem apenas no navegador atual. A qualidade baixa desativa sombras e reduz a resolução de renderização.
+O menu de configurações oferece sensibilidade, campo de visão horizontal, volume, qualidade gráfica, inversão vertical e contador de FPS. Os ajustes são salvos na conta; o menu informa sucesso ou falha. A qualidade baixa desativa sombras e reduz a resolução de renderização.
 
 ## Publicar o frontend na Vercel
 
@@ -65,7 +66,7 @@ O menu de configurações oferece sensibilidade, campo de visão horizontal, vol
 3. Comando de instalação: `npm ci`. Comando de build: `npm run build`. Saída: `dist`.
 4. Escolha Node.js 22.12+ ou 24 LTS e faça o deploy.
 
-O arquivo `vercel.json` já declara framework, build e diretório de saída. O frontend é estático, usa assets locais e não exige variáveis de ambiente. A URL HTTPS da Vercel permite WebGL e captura do ponteiro mediante clique. Não abra `dist/index.html` diretamente com `file://`; use um servidor HTTP. O deploy em uma conta Vercel requer que o proprietário conecte o repositório; este código não cria uma conta nem configura credenciais.
+O arquivo `vercel.json` já declara framework, build e diretório de saída. O frontend é estático. Supabase Auth usa a URL e chave publicável de `src/auth/account.ts`, substituíveis por `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`. Nunca coloque uma chave administrativa em variáveis VITE_. A URL HTTPS da Vercel permite WebGL e captura do ponteiro mediante clique. Não abra `dist/index.html` diretamente com `file://`; use um servidor HTTP. O deploy em uma conta Vercel requer que o proprietário conecte o repositório; este código não cria uma conta nem configura credenciais.
 
 ## Organização
 
@@ -91,16 +92,33 @@ Os antigos arquivos vazios `src/game` e `src/ui` foram convertidos em diretório
 
 O **GDD 1.4 continua sendo a referência de planejamento**. O arquivo `docs/GDD.md` recebido no repositório é um placeholder vazio e foi preservado sem alterações; esta entrega não inventa nem substitui seu conteúdo.
 
-| Disponível nesta Alpha                    | Planejado para etapas seguintes                |
-| ----------------------------------------- | ---------------------------------------------- |
-| Campo de treino local em 3D               | IA de personagens e combate                    |
-| Câmera FPS, seis movimentos e colisões    | Campanha e missões narrativas                  |
-| Alvos, disparos, recarga e precisão       | Multiplayer por equipes e rodadas              |
-| Menu, pausa, HUD e configurações          | Contas e progresso persistente                 |
-| Frontend estático com configuração Vercel | Backend, autoridade de servidor e persistência |
+| Disponível nesta Alpha                         | Planejado para etapas seguintes                |
+| ---------------------------------------------- | ---------------------------------------------- |
+| Campo de treino local em 3D                    | IA de personagens e combate                    |
+| Câmera FPS, seis movimentos e colisões         | Campanha e missões narrativas                  |
+| Alvos, disparos, recarga e precisão            | Multiplayer por equipes e rodadas              |
+| Menu, pausa, HUD, login e configurações online | Histórico completo e progresso de campanha     |
+| Frontend estático com configuração Vercel      | Backend, autoridade de servidor e persistência |
 
-Não há bots, oponentes, dano recebido, partidas online, login ou progresso persistente nesta versão. O indicador de saúde representa o estado inicial do jogador no campo de treino. Os contratos de extensão não simulam funcionalidades que ainda não existem.
+Não há bots, oponentes, dano recebido, partidas online ou progresso de campanha nesta versão. O indicador de saúde representa o estado inicial do jogador no campo de treino. Os contratos de extensão não simulam funcionalidades que ainda não existem.
 
 ## Propriedade intelectual
 
 Copyright © 2026 LeonePlays. **All Rights Reserved — Proprietary Software.** Consulte [LICENSE.md](LICENSE.md). As dependências de terceiros permanecem sujeitas às respectivas licenças.
+
+## Contas e acesso público
+
+O cadastro/login é obrigatório para entrar no treino. Confirmação por e-mail, recuperação de senha e logout usam Supabase Auth. Configurações e resumo do último treino (acertos, disparos, duração, data) são pequenos documentos nos metadados da própria conta. Não é necessário SQL. O resumo é salvo ao pausar, reiniciar ou voltar ao menu; fechar abruptamente pode perder a última gravação. Não há histórico completo ou retomada da posição. Resultados são editáveis pelo cliente e não servem para ranking.
+
+O proprietário precisa configurar:
+
+1. Supabase → Authentication → URL Configuration: Site URL para o endereço definitivo; Redirect URLs incluindo esse endereço, preview e `http://localhost:5173/`.
+2. Supabase → Authentication: Email habilitado, confirmação de e-mail e SMTP próprio para envio a usuários públicos. O envio padrão é restrito; a chave publicável não permite alterar essas configurações.
+3. Vercel → Settings → Deployment Protection: tornar público o endereço compartilhado ou publicar em produção pública. Verificar em janela anônima que só aparece o login do TACTICAL FPS.
+4. Validar com e-mail real: cadastrar, confirmar, entrar, salvar ajustes, entrar em outro navegador e recuperar senha. Testes simulados não comprovam entrega de e-mails.
+
+## Combate e próxima entrega
+
+Primária automática e secundária semiautomática têm carregadores independentes, tempos de recarga próprios e troca pelas teclas 1/2. Há recuo de câmera, dispersão por movimento, salto e rajada, mais estabilidade agachado/deitado, clarão e áudio com camada de ruído. A reserva continua infinita no treino. As armas continuam modelos procedurais simples; não são assets realistas finalizados.
+
+**Ainda pendentes:** faca, granadas, equipamentos, bomba, bots, salas, dano/morte e multiplayer. Salas online exigem servidor de partidas separado da Vercel estática, simulação autoritativa e testes entre clientes; Supabase Auth não substitui esse servidor. Preserve o planejamento GDD 1.4 ao definir essas etapas.

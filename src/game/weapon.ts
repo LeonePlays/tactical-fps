@@ -7,7 +7,7 @@ import type { Scene } from '@babylonjs/core/scene';
 import type { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera';
 
 /** Original low-poly carbine, built entirely from primitives. */
-export function createWeapon(scene: Scene, camera: UniversalCamera): TransformNode {
+export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = false): TransformNode {
   const root = new TransformNode('carbine', scene);
   root.parent = camera;
   root.position = new Vector3(0.23, -0.24, 0.55);
@@ -54,5 +54,25 @@ export function createWeapon(scene: Scene, camera: UniversalCamera): TransformNo
   barrel.material = metal;
   barrel.isPickable = false;
   barrel.renderingGroupId = 1;
+  const flash = part('muzzle-flash', [0.1, 0.06, 0.16], [0, 0.005, pistol ? 0.2 : 0.72], sight);
+  const fire = new StandardMaterial('muzzle-light', scene);
+  fire.emissiveColor.set(1, 0.65, 0.1);
+  fire.disableLighting = true;
+  flash.material = fire;
+  flash.setEnabled(false);
+  if (pistol) {
+    for (const mesh of root.getChildMeshes()) {
+      if (
+        ['stock', 'handguard', 'carbine-barrel', 'rail', 'front-sight', 'sight-dot'].includes(
+          mesh.name,
+        )
+      )
+        mesh.setEnabled(false);
+      else {
+        mesh.scaling.z *= 0.65;
+        mesh.position.z *= 0.65;
+      }
+    }
+  }
   return root;
 }

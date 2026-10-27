@@ -1063,3 +1063,31 @@ em {
     color: #aabb9b;
   }
 }
+
+.account-overlay {
+  z-index: 90;
+  background: rgba(8, 15, 16, 0.96);
+}
+.account-overlay .dialog-panel {
+  max-height: 94vh;
+  overflow-y: auto;
+}
+.account-overlay label {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.account-overlay label[hidden] {
+  display: none;
+}
+.account-overlay input {
+  padding: 12px;
+  color: white;
+  background: #172326;
+  border: 1px solid #637477;
+  font: inherit;
+}
+#account-status {
+  max-width: 300px;
+  font-size: 11px;
+}
