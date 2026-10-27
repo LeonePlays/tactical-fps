@@ -318,7 +318,10 @@ export class Game {
     this.flashUntil = this.elapsed + 0.045;
     this.recoil = 1;
     this.audio.play('shot');
-    const aimSpread = spread(this.body.moving, this.body.grounded, this.body.stance, this.heat);
+    const aimSpread =
+      !this.body.moving && this.body.grounded && this.heat === 0
+        ? 0
+        : spread(this.body.moving, this.body.grounded, this.body.stance, this.heat);
     const direction = this.camera.getForwardRay().direction.clone();
     direction.x += (Math.random() - 0.5) * aimSpread;
     direction.y += (Math.random() - 0.5) * aimSpread;

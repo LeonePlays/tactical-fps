@@ -70,6 +70,7 @@ test('WebGL scene is playable: pointer lock, targets, WASD, sprint, stances, jum
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await start(page);
+  await expect(page.locator('#hud')).toHaveAttribute('data-grounded', 'true');
   // The centre lane has a target in front of the spawn. Shoot using native input.
   await page.mouse.down();
   await page.mouse.up();

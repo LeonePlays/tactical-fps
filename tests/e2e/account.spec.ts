@@ -32,3 +32,18 @@ test('secondary weapon is semi automatic and magazines remain separate', async (
   await page.keyboard.press('2');
   await expect(page.locator('#ammo-count')).toHaveText('11');
 });
+
+test('recovery link asks for a new password', async ({ page }) => {
+  await accountFixture(page, false);
+  await page.goto(
+    '/#access_token=test-token&refresh_token=test-refresh&expires_in=3600&token_type=bearer&type=recovery',
+  );
+  await expect(page.getByRole('button', { name: 'SALVAR NOVA SENHA' })).toBeVisible();
+  await page.getByLabel('Senha', { exact: true }).fill('new-test-password');
+  const update = page.waitForRequest(
+    (request) => request.url().endsWith('/user') && request.method() === 'PUT',
+  );
+  await page.getByRole('button', { name: 'SALVAR NOVA SENHA' }).click();
+  expect((await update).postDataJSON().password).toBe('new-test-password');
+  await expect(page.locator('.account-overlay')).toBeHidden();
+});

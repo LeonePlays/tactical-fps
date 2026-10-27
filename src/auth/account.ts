@@ -120,6 +120,21 @@ export function mountAccount(change: (user: User | null, settings?: Settings) =>
       apply(null);
     }
   };
+  shell.addEventListener('keydown', (event) => {
+    if (event.key !== 'Tab') return;
+    const nodes = [...shell.querySelectorAll<HTMLElement>('input, button')].filter(
+      (node) => node.getClientRects().length && !(node as HTMLButtonElement).disabled,
+    );
+    const first = nodes[0],
+      last = nodes.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  });
   setMode('login');
   return {
     get canPlay() {
