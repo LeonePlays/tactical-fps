@@ -52,6 +52,7 @@ export class Game {
   private fireUntil = 0;
   private netTimer = 0;
   private matchHealth = 100;
+  private receivedMatch = false;
   private remotes = new Map<string, Mesh>();
   private actorMaterials = new Map<boolean, StandardMaterial>();
   private readonly audio = new GameAudio();
@@ -440,6 +441,12 @@ export class Game {
     const own = state.actors.find((a) => a.id === state.self);
     if (!own) return;
     this.body.position = { ...own.position };
+    if (!this.receivedMatch || (this.matchHealth <= 0 && own.health > 0)) {
+      this.yaw = own.yaw;
+      this.pitch = 0;
+      this.syncCamera(1);
+    }
+    this.receivedMatch = true;
     this.matchHealth = own.health;
     if (own.weapon === this.slot) this.ammo = own.ammo;
     for (const actor of state.actors) {

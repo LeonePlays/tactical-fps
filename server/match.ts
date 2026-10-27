@@ -30,7 +30,7 @@ export class Match {
       id,
       bot,
       body,
-      input: { ...IDLE_INPUT },
+      input: { ...IDLE_INPUT, yaw: Math.atan2(-body.position.x, -body.position.z) },
       health: 100,
       kills: 0,
       deaths: 0,
@@ -69,7 +69,7 @@ export class Match {
           a.health = 100;
           a.ammo = { primary: 30, secondary: 12 };
           a.reloadUntil = 0;
-          a.input = { ...IDLE_INPUT };
+          a.input = { ...IDLE_INPUT, yaw: Math.atan2(-spawn.x, -spawn.z) };
           a.fireHeld = false;
           a.nextShot = this.time + 1;
         }
