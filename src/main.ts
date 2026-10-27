@@ -328,6 +328,17 @@ async function joinRoom(create: boolean) {
             },
             true,
           );
+          startButton.disabled = true;
+          const roomGame = game;
+          void roomGame
+            .ready()
+            .then(() => {
+              if (game === roomGame) startButton.disabled = false;
+            })
+            .catch(() => {
+              el('room-message').textContent =
+                'Não foi possível preparar a arena 3D. Volte ao treino e tente novamente.';
+            });
           roomReady = true;
           currentRoom = state.room;
           startLabel.textContent = 'ENTRAR NA ARENA';
