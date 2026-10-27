@@ -109,6 +109,7 @@ function onLockChange(locked: boolean): void {
 
 function updateHud(state: GameSnapshot): void {
   latestSnapshot = state;
+  hud.dataset.weaponVisible = String(state.weaponVisible);
   document.querySelector('.hud-ammo .label')!.textContent = WEAPONS[state.weapon].name;
   document.querySelector('.hud-ammo div > span')!.textContent =
     `/ ${WEAPONS[state.weapon].capacity}`;

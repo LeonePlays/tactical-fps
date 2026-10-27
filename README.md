@@ -14,6 +14,8 @@ A direção visual usa geometria simples, texturas de baixa resolução e cores 
 
 ![Sessão de treino com câmera FPS, arma e HUD](docs/screenshots/gameplay.jpg)
 
+![Arena com bots locais e pistola P-09](docs/screenshots/arena-pistola.png)
+
 ## Executar localmente
 
 Requisitos: **Node.js 22.12+ ou 24 LTS** e npm.

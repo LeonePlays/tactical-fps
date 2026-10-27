@@ -55,6 +55,8 @@ test('bots run in this browser without a WebSocket server', async ({ page }) => 
   await expect(page.locator('.hud-top-left strong')).toContainText('LOCAL');
   await page.keyboard.press('2');
   await expect(page.locator('.hud-ammo .label')).toHaveText('PISTOLA P-09');
+  await expect(page.locator('#hud')).toHaveAttribute('data-weapon-visible', 'true');
+  await page.waitForTimeout(500);
   await page.screenshot({ path: '/tmp/tactical-local-bots.png' });
   expect(sockets).toBe(0);
 });

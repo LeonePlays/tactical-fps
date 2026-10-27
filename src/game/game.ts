@@ -19,6 +19,7 @@ import type { Settings } from '../core/settings';
 
 export interface GameSnapshot {
   weapon: WeaponSlot;
+  weaponVisible: boolean;
   ammo: number;
   hits: number;
   shots: number;
@@ -501,6 +502,9 @@ export class Game {
   private emitSnapshot(): void {
     this.events.onSnapshot({
       weapon: this.slot,
+      weaponVisible: this.weapon
+        .getChildMeshes()
+        .some((mesh) => mesh.isEnabled() && this.scene.getActiveMeshes().indexOf(mesh) >= 0),
       ammo: this.ammo,
       hits: this.hits,
       shots: this.shots,

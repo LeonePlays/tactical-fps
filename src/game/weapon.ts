@@ -31,6 +31,7 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
     mesh.position.set(position[0], position[1], position[2]);
     mesh.material = mat;
     mesh.isPickable = false;
+    mesh.alwaysSelectAsActiveMesh = true;
     mesh.renderingGroupId = 1;
     return mesh;
   };
@@ -76,6 +77,7 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metal;
   barrel.isPickable = false;
+  barrel.alwaysSelectAsActiveMesh = true;
   barrel.renderingGroupId = 1;
   const flash = part('muzzle-flash', [0.1, 0.06, 0.16], [0, 0.005, pistol ? 0.2 : 0.72], sight);
   const fire = new StandardMaterial('muzzle-light', scene);
