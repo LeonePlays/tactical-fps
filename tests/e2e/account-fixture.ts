@@ -1,7 +1,11 @@
 import type { Page } from '@playwright/test';
-export async function accountFixture(page: Page, authenticated = true) {
+export async function accountFixture(
+  page: Page,
+  authenticated = true,
+  playerId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+) {
   const user = {
-    id: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+    id: playerId,
     aud: 'authenticated',
     email: 'test@example.com',
     created_at: new Date().toISOString(),
@@ -9,7 +13,7 @@ export async function accountFixture(page: Page, authenticated = true) {
     user_metadata: {} as Record<string, unknown>,
   };
   const session = {
-    access_token: 'test-token',
+    access_token: `test-token-${playerId}`,
     refresh_token: 'test-refresh',
     expires_in: 3600,
     expires_at: Math.floor(Date.now() / 1000) + 3600,

@@ -1,3 +1,8 @@
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import type { Mesh } from '@babylonjs/core/Meshes/mesh';
+import type { MatchInput, MatchState } from '../network/protocol';
 import { WEAPONS, spread, type WeaponSlot } from './ballistics';
 import { Camera } from '@babylonjs/core/Cameras/camera';
 import { Engine } from '@babylonjs/core/Engines/engine';
@@ -30,6 +35,7 @@ export interface GameSnapshot {
 export interface GameEvents {
   onLockChange(locked: boolean): void;
   onSnapshot(snapshot: GameSnapshot): void;
+  onInput?(input: MatchInput): void;
 }
 
 export class Game {
@@ -43,6 +49,11 @@ export class Game {
   private magazines = { primary: 30, secondary: 12 };
   private heat = 0;
   private flashUntil = 0;
+  private fireUntil = 0;
+  private netTimer = 0;
+  private matchHealth = 100;
+  private remotes = new Map<string, Mesh>();
+  private actorMaterials = new Map<boolean, StandardMaterial>();
   private readonly audio = new GameAudio();
   private body: PlayerBody;
   private settings: Settings;
@@ -68,6 +79,7 @@ export class Game {
     private readonly canvas: HTMLCanvasElement,
     settings: Settings,
     private readonly events: GameEvents,
+    private readonly online = false,
   ) {
     this.settings = { ...settings };
     this.engine = new Engine(
@@ -89,7 +101,7 @@ export class Game {
     this.menuCamera.maxZ = 200;
     this.menuCamera.fov = 0.95;
     this.menuCamera.setTarget(new Vector3(-1, 2, 5));
-    this.world = createWorld(this.scene);
+    this.world = createWorld(this.scene, online);
     this.body = new PlayerBody(this.world.solids, this.world.spawn);
     this.weapon = createWeapon(this.scene, this.camera);
     this.weapon.setEnabled(false);
@@ -305,6 +317,7 @@ export class Game {
   }
 
   private shoot(): void {
+    if (this.online && this.matchHealth <= 0) return;
     if (!this.active || this.reloadUntil || this.elapsed < this.nextShotAt) return;
     if (!this.ammo) {
       this.reload();
@@ -316,6 +329,7 @@ export class Game {
     this.nextShotAt = this.elapsed + spec.interval;
     if (!spec.automatic) this.trigger = false;
     this.flashUntil = this.elapsed + 0.045;
+    this.fireUntil = this.elapsed + 0.075;
     this.recoil = 1;
     this.audio.play('shot');
     const aimSpread =
@@ -353,17 +367,18 @@ export class Game {
     const dt = Math.min(this.engine.getDeltaTime() / 1000, 0.05);
     if (this.active) {
       this.elapsed += dt;
-      this.body.step(
-        {
-          forward: Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')),
-          right: Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')),
-          sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
-          jump: this.keys.has('Space'),
-          stance: this.requestedStance,
-        },
-        this.yaw,
-        dt,
-      );
+      if (!this.online || this.matchHealth > 0)
+        this.body.step(
+          {
+            forward: Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')),
+            right: Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')),
+            sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+            jump: this.keys.has('Space'),
+            stance: this.requestedStance,
+          },
+          this.yaw,
+          dt,
+        );
       this.syncCamera(1 - Math.exp(-18 * dt));
       if (this.reloadUntil && this.elapsed >= this.reloadUntil) {
         this.ammo = WEAPONS[this.slot].capacity;
@@ -394,12 +409,78 @@ export class Game {
       this.menuCamera.position.x = 29 + Math.sin(performance.now() * 0.00004) * 1.4;
       this.menuCamera.setTarget(new Vector3(-1, 2, 5));
     }
+    if (this.online) {
+      this.netTimer += dt;
+      if (this.netTimer >= 0.05) {
+        this.netTimer = 0;
+        const active = this.active && this.matchHealth > 0;
+        this.events.onInput?.({
+          forward: active ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) : 0,
+          right: active ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) : 0,
+          sprint: active && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')),
+          jump: active && this.keys.has('Space'),
+          stance: this.requestedStance,
+          yaw: this.yaw,
+          pitch: this.pitch,
+          fire: active && (this.trigger || this.elapsed < this.fireUntil),
+          reload: active && this.keys.has('KeyR'),
+          weapon: this.slot,
+        });
+      }
+    }
     this.hudTimer += dt;
     if (this.hudTimer >= 0.05) {
       this.hudTimer = 0;
       this.emitSnapshot();
     }
     this.scene.render();
+  }
+
+  applyMatch(state: MatchState): void {
+    const own = state.actors.find((a) => a.id === state.self);
+    if (!own) return;
+    this.body.position = { ...own.position };
+    this.matchHealth = own.health;
+    if (own.weapon === this.slot) this.ammo = own.ammo;
+    for (const actor of state.actors) {
+      if (actor.id === state.self) continue;
+      let mesh = this.remotes.get(actor.id);
+      if (!mesh) {
+        mesh = MeshBuilder.CreateBox(
+          `actor-${actor.id}`,
+          { width: 0.65, height: 1, depth: 0.65 },
+          this.scene,
+        );
+        let material = this.actorMaterials.get(actor.bot);
+        if (!material) {
+          material = new StandardMaterial(`actor-${actor.bot}`, this.scene);
+          material.diffuseColor = Color3.FromHexString(actor.bot ? '#c8743a' : '#528cb0');
+          this.actorMaterials.set(actor.bot, material);
+        }
+        mesh.material = material;
+        mesh.isPickable = false;
+        this.remotes.set(actor.id, mesh);
+        const head = MeshBuilder.CreateSphere(
+          `actor-head-${actor.id}`,
+          { diameter: 0.34, segments: 8 },
+          this.scene,
+        );
+        head.parent = mesh;
+        head.position.y = 0.42;
+        head.material = material;
+        head.isPickable = false;
+      }
+      const height = { standing: 1.8, crouching: 1.12, prone: 0.55 }[actor.stance];
+      mesh.scaling.y = height;
+      mesh.position.set(actor.position.x, actor.position.y + height / 2, actor.position.z);
+      mesh.rotation.y = actor.yaw;
+      mesh.setEnabled(actor.health > 0);
+    }
+    for (const [id, mesh] of this.remotes)
+      if (!state.actors.some((a) => a.id === id)) {
+        mesh.dispose();
+        this.remotes.delete(id);
+      }
   }
 
   private syncCamera(smoothing: number): void {

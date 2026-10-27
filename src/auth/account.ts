@@ -137,6 +137,10 @@ export function mountAccount(change: (user: User | null, settings?: Settings) =>
   });
   setMode('login');
   return {
+    async token() {
+      const { data } = await client.auth.getSession();
+      return data.session?.access_token || null;
+    },
     get canPlay() {
       return !!user && mode !== 'update';
     },

@@ -77,7 +77,7 @@ src/
   ui/            Menus, configurações, ajuda e HUD
   styles/        Estilos da interface de computador
   features/      Contratos para IA, campanha, multiplayer e autenticação
-server/          Limites e planejamento do futuro backend (sem servidor nesta versão)
+server/          Servidor WebSocket autoritativo para salas locais
 public/assets/   Diretórios preservados para mapas, modelos e áudio futuros
   maps/
   models/
@@ -100,7 +100,7 @@ O **GDD 1.4 continua sendo a referência de planejamento**. O arquivo `docs/GDD.
 | Menu, pausa, HUD, login e configurações online | Histórico completo e progresso de campanha     |
 | Frontend estático com configuração Vercel      | Backend, autoridade de servidor e persistência |
 
-Não há bots, oponentes, dano recebido, partidas online ou progresso de campanha nesta versão. O indicador de saúde representa o estado inicial do jogador no campo de treino. Os contratos de extensão não simulam funcionalidades que ainda não existem.
+O treino individual continua sem dano recebido. Salas locais têm bots/jogadores, dano e reaparecimento; campanha e partidas públicas hospedadas continuam pendentes. No campo de treino a saúde permanece em 100; nas salas a saúde vem do servidor. Os contratos de extensão não simulam funcionalidades que ainda não existem.
 
 ## Propriedade intelectual
 
@@ -117,8 +117,10 @@ O proprietário precisa configurar:
 3. Vercel → Settings → Deployment Protection: tornar público o endereço compartilhado ou publicar em produção pública. Verificar em janela anônima que só aparece o login do TACTICAL FPS.
 4. Validar com e-mail real: cadastrar, confirmar, entrar, salvar ajustes, entrar em outro navegador e recuperar senha. Testes simulados não comprovam entrega de e-mails.
 
-## Combate e próxima entrega
+## Combate e partidas locais
 
 Primária automática e secundária semiautomática têm carregadores independentes, tempos de recarga próprios e troca pelas teclas 1/2. Há recuo de câmera, dispersão por movimento, salto e rajada, mais estabilidade agachado/deitado, clarão e áudio com camada de ruído. A reserva continua infinita no treino. As armas continuam modelos procedurais simples; não são assets realistas finalizados.
 
-**Ainda pendentes:** faca, granadas, equipamentos, bomba, bots, salas, dano/morte e multiplayer. Salas online exigem servidor de partidas separado da Vercel estática, simulação autoritativa e testes entre clientes; Supabase Auth não substitui esse servidor. Preserve o planejamento GDD 1.4 ao definir essas etapas.
+**Partidas locais:** crie ou entre numa sala com código, até oito participantes incluindo zero a quatro bots. Há arena compartilhada, dano, morte e reaparecimento controlados por servidor. Consulte [como iniciar e publicar o servidor](server/README.md). O servidor ainda não está hospedado; o preview Vercel sozinho não oferece partidas online.
+
+**Ainda pendentes:** faca, granadas, equipamentos, bomba e melhorias de IA, personagens e sincronização. Salas online exigem servidor de partidas separado da Vercel estática, simulação autoritativa e testes entre clientes; Supabase Auth não substitui esse servidor. Preserve o planejamento GDD 1.4 ao definir essas etapas.

@@ -1,3 +1,5 @@
+import type { MatchState } from './network/protocol';
+import { connectRoom } from './network/connection';
 import { WEAPONS } from './game/ballistics';
 import { mountAccount } from './auth/account';
 import './styles/main.css';
@@ -24,6 +26,17 @@ const startButton = el<HTMLButtonElement>('start-button');
 const startLabel = el('start-label');
 const startHelp = el('start-help');
 const settingsMessage = el('settings-message');
+let roomConnection: ReturnType<typeof connectRoom> | undefined;
+let connecting = false;
+let roomReady = false;
+let currentRoom = '';
+let latestRoom: MatchState | undefined;
+const lobby = document.createElement('section');
+lobby.className = 'local-lobby';
+lobby.innerHTML = `<details><summary>SALAS COM JOGADORES E BOTS</summary><p>Inicie o servidor local para criar uma sala. Cada jogador precisa de uma conta.</p><label>Servidor <input id="room-server" aria-label="Servidor de partidas" value="ws://127.0.0.1:3001" maxlength="200"></label><label>Bots <select id="room-bots"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label><button id="create-room" class="button secondary">CRIAR SALA</button><label>Código <input id="room-code" maxlength="6" placeholder="ABC123"></label><button id="join-room" class="button secondary">ENTRAR NA SALA</button><button id="disconnect-room" class="button text-button">VOLTAR AO TREINO INDIVIDUAL</button><p id="room-message" role="status"></p></details>`;
+document.querySelector('.hero')!.append(lobby);
+el<HTMLInputElement>('room-server').value =
+  import.meta.env.VITE_MATCH_SERVER_URL || 'ws://127.0.0.1:3001';
 let settings = loadSettings();
 let game: Game | undefined;
 let inSession = false;
@@ -34,6 +47,15 @@ const account = mountAccount((user, cloudSettings) => {
   settings = cloudSettings || { ...DEFAULT_SETTINGS };
   game?.applySettings(settings);
   if (!user) {
+    roomConnection?.close();
+    roomConnection = undefined;
+    connecting = false;
+    if (roomReady) {
+      roomReady = false;
+      game?.dispose();
+      game = undefined;
+      void boot();
+    }
     inSession = false;
     game?.showMenu();
     hud.hidden = true;
@@ -44,7 +66,7 @@ const account = mountAccount((user, cloudSettings) => {
   }
 });
 function saveTraining() {
-  if (inSession && latestSnapshot) {
+  if (!roomReady && inSession && latestSnapshot) {
     const { hits, shots, elapsed } = latestSnapshot;
     account.save({ last_training: { hits, shots, elapsed, savedAt: new Date().toISOString() } });
   }
@@ -85,7 +107,11 @@ function updateHud(state: GameSnapshot): void {
   document.querySelector('.hud-ammo div > span')!.textContent =
     `/ ${WEAPONS[state.weapon].capacity}`;
   el('ammo-count').textContent = String(state.ammo).padStart(2, '0');
-  el('hit-count').textContent = String(state.hits).padStart(2, '0');
+  const own = roomReady ? latestRoom?.actors.find((a) => a.id === latestRoom?.self) : undefined;
+  document.querySelector('.hud-score .label')!.textContent = roomReady
+    ? 'ELIMINAÇÕES'
+    : 'ALVOS ATINGIDOS';
+  el('hit-count').textContent = String(own?.kills ?? state.hits).padStart(2, '0');
   el('accuracy').textContent = state.shots
     ? `${Math.round((state.hits / state.shots) * 100)}%`
     : '—';
@@ -154,13 +180,13 @@ async function enterGame(fresh = false): Promise<void> {
   entering = true;
   const wasInSession = inSession;
   try {
-    if (fresh) {
+    if (fresh && !roomReady) {
       saveTraining();
       game.reset();
     }
     inSession = true;
     await game.enter();
-    el('pause-message').textContent = '';
+    el('pause-message').textContent = roomReady ? 'A partida continua online durante a pausa.' : '';
   } catch {
     inSession = wasInSession;
     onLockChange(false);
@@ -185,7 +211,7 @@ root.addEventListener('click', (event) => {
       void enterGame();
       break;
     case 'restart':
-      void enterGame(true);
+      void enterGame(!roomReady);
       break;
     case 'settings':
       openDialog('settings');
@@ -275,7 +301,100 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+async function joinRoom(create: boolean) {
+  if (!account.canPlay || connecting || roomConnection) return;
+  connecting = true;
+  el('room-message').textContent = 'Conectando…';
+  try {
+    const token = await account.token();
+    if (!token) throw new Error('Entre novamente na conta.');
+    const { Game: GameClass } = await import('./game/game');
+    roomConnection = connectRoom({
+      url: el<HTMLInputElement>('room-server').value,
+      token,
+      create,
+      bots: Number(el<HTMLSelectElement>('room-bots').value),
+      room: el<HTMLInputElement>('room-code').value.trim().toUpperCase(),
+      state: (state) => {
+        if (!roomReady) {
+          game?.dispose();
+          game = new GameClass(
+            canvas,
+            settings,
+            {
+              onLockChange,
+              onSnapshot: updateHud,
+              onInput: (input) => roomConnection?.send(input),
+            },
+            true,
+          );
+          roomReady = true;
+          currentRoom = state.room;
+          startLabel.textContent = 'ENTRAR NA ARENA';
+          el('pause-message').textContent = 'A partida continua online durante a pausa.';
+        }
+        connecting = false;
+        latestRoom = state;
+        hud.dataset.room = state.room;
+        hud.dataset.actors = String(state.actors.length);
+        game?.applyMatch(state);
+        const own = state.actors.find((a) => a.id === state.self);
+        el('room-message').textContent =
+          `SALA ${state.room} · ${state.actors.filter((a) => !a.bot).length} jogadores · ${state.actors.filter((a) => a.bot).length} bots. Compartilhe o código.`;
+        document.querySelector('.health-icon + strong')!.firstChild!.textContent = String(
+          own?.health || 0,
+        );
+        el('training-tip').textContent =
+          own?.health === 0
+            ? 'ELIMINADO — REAPARECIMENTO EM 3 SEGUNDOS'
+            : `SALA ${currentRoom} · ${own?.kills || 0} eliminações / ${own?.deaths || 0} mortes · laranja: bots, azul: jogadores`;
+        document.querySelector('.hud-top-left strong')!.textContent = `ARENA / ${state.room}`;
+        document.querySelector('.hud-top-left .label')!.textContent = 'COMBATE LIVRE';
+        if (own?.health === 0) el('training-tip').hidden = false;
+      },
+      closed: (message) => {
+        connecting = false;
+        game?.pause();
+        inSession = false;
+        hud.hidden = true;
+        pause.hidden = true;
+        menu.hidden = false;
+        el('room-message').textContent = message;
+        startButton.disabled = true;
+      },
+    });
+  } catch (error) {
+    connecting = false;
+    el('room-message').textContent = error instanceof Error ? error.message : 'Falha ao conectar.';
+  }
+}
+el('create-room').addEventListener('click', () => void joinRoom(true));
+el('join-room').addEventListener('click', () => void joinRoom(false));
+el('disconnect-room').addEventListener('click', () => {
+  roomConnection?.close();
+  roomConnection = undefined;
+  roomReady = false;
+  connecting = false;
+  inSession = false;
+  game?.dispose();
+  game = undefined;
+  hud.hidden = true;
+  pause.hidden = true;
+  menu.hidden = false;
+  startButton.disabled = true;
+  latestRoom = undefined;
+  delete hud.dataset.room;
+  delete hud.dataset.actors;
+  document.querySelector('.health-icon + strong')!.firstChild!.textContent = '100';
+  el('room-message').textContent = 'Desconectado.';
+  void boot();
+});
+
 async function boot(): Promise<void> {
+  document.querySelector('.hud-top-left strong')!.textContent = 'COMPLEXO FERRO';
+  document.querySelector('.hud-top-left .label')!.textContent = 'TREINO LIVRE';
+  el('training-tip').textContent =
+    'Explore o complexo e acerte os alvos laranja. Eles retornam após 4 segundos.';
   try {
     const { Game: GameClass } = await import('./game/game');
     game = new GameClass(canvas, settings, { onLockChange, onSnapshot: updateHud });
@@ -295,5 +414,8 @@ async function boot(): Promise<void> {
 }
 void boot();
 window.addEventListener('pagehide', (event) => {
-  if (!event.persisted) game?.dispose();
+  if (!event.persisted) {
+    roomConnection?.close();
+    game?.dispose();
+  }
 });

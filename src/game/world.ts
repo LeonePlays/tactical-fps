@@ -1,3 +1,4 @@
+import { ARENA_BLOCKS } from '../network/arena';
 import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
@@ -26,7 +27,7 @@ export interface World {
   spawn: { x: number; y: number; z: number };
 }
 
-export function createWorld(scene: Scene): World {
+export function createWorld(scene: Scene, arena = false): World {
   const solids: Solid[] = [];
   const staticMeshes: { mesh: Mesh; castsShadow: boolean }[] = [];
   scene.clearColor = Color4.FromHexString('#aeb6aeff');
@@ -185,6 +186,22 @@ export function createWorld(scene: Scene): World {
     mesh.material = mat;
   }
 
+  if (arena) {
+    for (const b of ARENA_BLOCKS)
+      block(
+        b.name,
+        b.x,
+        b.y,
+        b.z,
+        b.w,
+        b.h,
+        b.d,
+        b.name === 'floor' ? ground : b.name.startsWith('crate') ? wood : concrete,
+      );
+    for (const { mesh } of staticMeshes) shadows.addShadowCaster(mesh);
+    sign('FERRO / ARENA LOCAL', 0, 3, 15.4, 8, 1.2);
+    return { solids, targets: [], shadows, spawn: { x: -12, y: 0.05, z: -12 } };
+  }
   block('yard-foundation', 0, -0.5, 0, 56, 1, 64, ground, true, false);
   // Enclosed play area: north wall, sides, and the gated south entrance.
   block('north-boundary', 0, 2, 31, 56, 4, 1, concrete);

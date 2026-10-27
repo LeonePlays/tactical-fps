@@ -23,13 +23,19 @@ O passo por frame é limitado para evitar teletransporte após travamentos. Em m
 - `GameMode` permite extrair modos de treino, campanha e multiplayer quando existirem requisitos concretos.
 - `AIController` recebe snapshots observáveis; percepção, navegação e decisão ainda serão desenvolvidas.
 - `CampaignMission` descreve mapa e objetivos, sem impor uma história ao GDD.
-- `MultiplayerTransport` separa comunicação e ciclo de vida da renderização. O backend futuro deverá validar movimento, disparos, acertos e saúde; o estado cliente desta Alpha não é seguro para competição.
+- `MultiplayerTransport` separa comunicação e ciclo de vida da renderização. O servidor local já valida movimento, disparos, acertos e saúde na arena; a versão ainda exige testes de carga e endurecimento antes de competição pública.
 - `AuthProvider` separa a UI de um futuro provedor de contas. A implementação atual usa Supabase Auth em `src/auth/account.ts`; o login é obrigatório.
 
-Não há necessidade de inicializar esses serviços na primeira entrega. Dados remotos deverão ser validados e a simulação autoritativa deverá existir antes de habilitar partidas online.
+Os contratos permanecem como pontos de extensão. Salas locais usam a implementação concreta em `src/network/` e `server/`, enquanto treino individual e campanha têm escopos separados.
 
 ## Qualidade e distribuição
 
 `npm test` executa testes unitários de movimento, gravidade, colisões, saltos, posturas e persistência validada de configurações. `npm run build` verifica tipos e empacota o frontend. `npm run test:e2e`, após build, verifica a aplicação de produção com Chromium, WebGL e entrada nativa. A CI executa as três verificações.
 
-A Vercel publica somente `dist/`; `server/` é uma reserva arquitetural e não uma função serverless. A criação do projeto e o deploy efetivo dependem da conta Vercel do proprietário. A compilação usa apenas URL e chave publicável. Jogar exige conta Supabase.
+A Vercel publica somente `dist/`; `server/` contém um processo persistente separado para partidas e não uma função serverless Vercel. A criação do projeto e o deploy efetivo dependem da conta Vercel do proprietário. A compilação usa apenas URL e chave publicável. Jogar exige conta Supabase.
+
+## Arena multiplayer local
+
+`server/server.ts` autentica WebSockets, gerencia salas efêmeras e transmite estado a 20 Hz. `server/match.ts` simula movimento, bots e tiros. `src/network/arena.ts` compartilha colisões com a cena; `protocol.ts` valida entradas. O cliente envia intenção, nunca posições ou acertos. Há previsão local simples com correção direta por snapshots; não há interpolação avançada, compensação de latência nem reconexão com preservação de placar.
+
+A arena é separada do Complexo Ferro de treino, para manter geometria e colisões iguais no servidor e navegador. Auth real exige acesso ao Supabase; testes injetam um verificador isolado. Consulte `server/README.md` para os comandos, limites e publicação futura.

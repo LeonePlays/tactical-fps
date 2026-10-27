@@ -19,10 +19,18 @@ export default defineConfig({
       args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'],
     },
   },
-  webServer: {
-    command: 'npm run preview -- --port 4173 --strictPort',
-    url: 'http://127.0.0.1:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
-  },
+  webServer: [
+    {
+      command: 'npm run preview -- --port 4173 --strictPort',
+      url: 'http://127.0.0.1:4173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      command: 'npx tsx tests/support/match-server.ts',
+      url: 'http://127.0.0.1:3002/health',
+      reuseExistingServer: false,
+      timeout: 30000,
+    },
+  ],
 });

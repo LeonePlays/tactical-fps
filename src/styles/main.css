@@ -1091,3 +1091,48 @@ em {
   max-width: 300px;
   font-size: 11px;
 }
+
+.local-lobby {
+  max-width: 520px;
+  margin-top: 16px;
+  background: #142022ed;
+  padding: 12px;
+  font-size: 12px;
+}
+.local-lobby summary {
+  cursor: pointer;
+  color: #d2e1a8;
+}
+.local-lobby label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px;
+}
+.local-lobby input,
+.local-lobby select {
+  background: #243237;
+  color: white;
+  border: 1px solid #687e73;
+  padding: 8px;
+  max-width: 240px;
+}
+.local-lobby .button {
+  min-height: 32px;
+  padding: 8px;
+  margin: 4px;
+  font-size: 11px;
+}
+
+.local-lobby {
+  position: fixed;
+  right: 40px;
+  top: 175px;
+  width: 340px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  z-index: 3;
+}
+.local-lobby input {
+  max-width: 235px;
+}

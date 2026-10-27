@@ -15,16 +15,21 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "server": "tsx server/index.ts",
+    "server:watch": "tsx watch server/index.ts"
   },
   "dependencies": {
     "@babylonjs/core": "^8.0.0",
-    "@supabase/supabase-js": "^2.118.0"
+    "@supabase/supabase-js": "^2.118.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
     "@types/node": "^24.19.2",
+    "@types/ws": "^8.18.2",
     "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
     "typescript": "~5.9.0",
     "vite": "^7.0.0",
     "vitest": "^5.0.5"
