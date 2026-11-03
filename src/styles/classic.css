@@ -1,0 +1,253 @@
+/* Compact, original classic-FPS HUD. Menus/auth retain their existing behaviour. */
+#hud {
+  color: #dbbc65;
+  font-family: Consolas, 'Courier New', monospace;
+  text-shadow: 1px 1px 1px #000;
+  font-variant-numeric: tabular-nums;
+}
+#radar {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  width: 144px;
+  height: 144px;
+  opacity: 0.85;
+}
+#hud .hud-top-left {
+  top: 171px;
+  left: 18px;
+  gap: 4px;
+  max-width: 200px;
+}
+#hud .hud-top-left strong {
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #c6d0aa;
+}
+#hud .hud-top-left .label {
+  font-size: 9px;
+  letter-spacing: 0;
+  color: #b7c298;
+}
+#hud .hud-session {
+  font-size: 8px;
+  letter-spacing: 0;
+  color: #b7c298;
+}
+#hud .hud-session #session-time {
+  color: #dbbc65;
+  margin-left: 4px;
+}
+#hud .compass {
+  top: 18px;
+  left: 170px;
+  transform: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 9px;
+}
+#hud .compass b {
+  font-size: 9px;
+  color: #aaba8c;
+}
+#hud .hud-score {
+  top: 20px;
+  right: 20px;
+  gap: 3px;
+  color: #d6bf7f;
+}
+#hud .hud-score .label {
+  font-size: 9px;
+  letter-spacing: 0;
+  color: inherit;
+}
+#hud .hud-score strong {
+  font-size: 20px;
+  color: inherit;
+}
+#hud .hud-score small {
+  font-size: 8px;
+}
+#hud .hud-bottom-left {
+  bottom: 22px;
+  left: 20px;
+  gap: 9px;
+  color: #dbbc65;
+}
+#hud .health-icon,
+#hud .armor-icon {
+  font-size: 24px;
+  color: inherit;
+}
+#hud .hud-bottom-left strong {
+  font-size: 27px;
+  font-weight: bold;
+}
+#hud .hud-bottom-left strong small {
+  display: none;
+}
+#hud .armor-icon {
+  margin-left: 24px;
+}
+#hud .stance-indicator {
+  margin-left: 22px;
+  gap: 3px;
+}
+#hud .stance-indicator b {
+  font-size: 9px;
+  letter-spacing: 0;
+}
+#hud .stance-indicator span {
+  font-size: 8px;
+  color: #b5bb9d;
+}
+#money-count {
+  position: absolute;
+  bottom: 94px;
+  right: 22px;
+  font-size: 25px;
+  color: #b8ce75;
+  font-weight: bold;
+}
+#hud .hud-ammo {
+  right: 22px;
+  bottom: 20px;
+  color: #dbbc65;
+}
+#hud .hud-ammo > .label {
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #c1c2a4;
+}
+#hud .hud-ammo > div {
+  gap: 7px;
+  margin: 4px 0;
+}
+#hud .hud-ammo strong {
+  font-size: 30px;
+  letter-spacing: 0;
+  font-weight: bold;
+}
+#hud .hud-ammo > div > span {
+  font-size: 23px;
+  color: inherit;
+}
+#reserve-count {
+  font-weight: normal;
+}
+#hud .hud-ammo small {
+  font-size: 9px;
+  letter-spacing: 0;
+  color: #c4c4a1;
+}
+#hud .hud-bottom-center {
+  bottom: 24px;
+  font-size: 9px;
+  gap: 16px;
+  color: #b6c198;
+}
+#hud .hud-bottom-center b {
+  font-size: 8px;
+  color: inherit;
+}
+#hud .hud-coordinates {
+  bottom: 7px;
+  left: 20px;
+  font-size: 8px;
+  color: #a4ad8b;
+}
+#hud .training-tip {
+  top: 40px;
+  left: 50%;
+  background: #152019a6;
+  border: 0;
+  color: #d7d3a7;
+  padding: 7px 12px;
+  font-size: 10px;
+  letter-spacing: 0;
+  max-width: 520px;
+}
+#crosshair {
+  --gap: 5px;
+  width: 0;
+  height: 0;
+  filter: drop-shadow(1px 1px 0 #222);
+}
+#crosshair i {
+  background: #9bdb52;
+}
+#crosshair i:nth-child(1) {
+  left: -1px;
+  top: calc(-1 * var(--gap) - 7px);
+  width: 2px;
+  height: 7px;
+}
+#crosshair i:nth-child(2) {
+  left: -1px;
+  top: var(--gap);
+  bottom: auto;
+  width: 2px;
+  height: 7px;
+}
+#crosshair i:nth-child(3) {
+  left: calc(-1 * var(--gap) - 7px);
+  top: -1px;
+  width: 7px;
+  height: 2px;
+}
+#crosshair i:nth-child(4) {
+  left: var(--gap);
+  top: -1px;
+  right: auto;
+  width: 7px;
+  height: 2px;
+}
+#hud #hit-marker {
+  font-size: 24px;
+  color: #d6c383;
+}
+#buy-panel {
+  position: absolute;
+  top: 28%;
+  left: 30px;
+  width: 340px;
+  padding: 18px;
+  background: #182219ed;
+  border: 1px solid #7a876a;
+  color: #d0d8b7;
+  text-shadow: none;
+}
+#buy-panel h2 {
+  font:
+    bold 17px Consolas,
+    monospace;
+  color: #e6db9e;
+  margin: 0 0 12px;
+}
+#buy-panel p {
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 8px 0;
+}
+#buy-panel ol {
+  padding-left: 24px;
+  margin: 15px 0;
+  font-size: 13px;
+}
+#buy-panel li {
+  padding: 8px 0;
+}
+#buy-panel li b {
+  float: right;
+  font-weight: normal;
+  color: #d9cc84;
+}
+#buy-message {
+  color: #e2c778;
+  min-height: 2em;
+}
+#buy-zone {
+  font-size: 10px !important;
+  color: #a8b08c;
+}

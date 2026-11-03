@@ -1,6 +1,6 @@
 # TACTICAL FPS
 
-**FPS tático 3D para navegadores de computador · Alpha 0.1**
+**FPS tático 3D para navegadores de computador · Classic Feel 0.2**
 
 A primeira versão jogável é um campo de treino individual no **Complexo Ferro**, um mapa industrial original. Explore armazéns, contêineres e passagens de manutenção, pratique os movimentos e acerte os seis alvos laranja. Os alvos retornam quatro segundos depois de atingidos.
 
@@ -8,7 +8,9 @@ A direção visual usa geometria simples, texturas de baixa resolução e cores 
 
 **Exclusivo para computadores:** teclado, mouse e navegador moderno com WebGL/aceleração gráfica. Chrome, Edge e Firefox atuais são os navegadores recomendados; a validação automatizada usa Chromium. Não há versão mobile nem controles de toque.
 
-## Capturas da Alpha
+## Capturas das versões
+
+![Classic Feel 0.2: HUD compacto, radar e inventário finito](docs/screenshots/classic-hud.png)
 
 ![Menu principal sobre o mapa 3D original](docs/screenshots/menu.jpg)
 
@@ -44,18 +46,18 @@ Em Linux com Chromium já instalado, é possível usar `PLAYWRIGHT_CHROMIUM_EXEC
 
 ## Controles
 
-| Entrada         | Ação                                                  |
-| --------------- | ----------------------------------------------------- |
-| Mouse           | Olhar / mirar                                         |
-| W A S D         | Movimentar                                            |
-| Shift + W       | Correr                                                |
-| Ctrl            | Alternar agachado / em pé                             |
-| Z               | Alternar deitado / em pé                              |
-| Espaço          | Saltar; indisponível deitado                          |
-| Clique esquerdo | Disparar; segure para fogo automático                 |
-| 1 / 2           | Trocar carabina / pistola                             |
-| R               | Recarregar (1,7 segundo; reserva ilimitada no treino) |
-| Esc             | Pausar e liberar o mouse                              |
+| Entrada         | Ação                                  |
+| --------------- | ------------------------------------- |
+| Mouse           | Olhar / mirar                         |
+| W A S D         | Movimentar                            |
+| Shift           | Andar silenciosamente                 |
+| Ctrl            | Alternar agachado / em pé             |
+| Z               | Alternar deitado / em pé              |
+| Espaço          | Saltar; indisponível deitado          |
+| Clique esquerdo | Disparar; segure para fogo automático |
+| 1 / 2           | Trocar carabina / pistola             |
+| R               | Recarregar usando a reserva finita    |
+| Esc             | Pausar e liberar o mouse              |
 
 Tetos baixos impedem levantar; a postura solicitada é aplicada quando há espaço. As passagens de manutenção sinalizadas permitem praticar agachamento e posição deitado. Caixas baixas podem ser ultrapassadas com salto. A sessão pausa ao perder foco; use **CONTINUAR** para retornar.
 
@@ -88,13 +90,13 @@ docs/            Planejamento, decisões e instruções para colaboradores
 tests/           Física, configurações e regressões funcionais com Playwright
 ```
 
-Os antigos arquivos vazios `src/game` e `src/ui` foram convertidos em diretórios com módulos. Nenhum conteúdo de implementação anterior foi removido. Consulte [arquitetura e limites da Alpha](docs/ARCHITECTURE.md) e [contribuição](docs/CONTRIBUTING.md).
+Os antigos arquivos vazios `src/game` e `src/ui` foram convertidos em diretórios com módulos. Nenhum conteúdo de implementação anterior foi removido. Consulte [arquitetura e limites atuais](docs/ARCHITECTURE.md) e [contribuição](docs/CONTRIBUTING.md).
 
 ## Escopo e planejamento GDD 1.4
 
 O **GDD 1.4 continua sendo a referência de planejamento**. O arquivo `docs/GDD.md` recebido no repositório é um placeholder vazio e foi preservado sem alterações; esta entrega não inventa nem substitui seu conteúdo.
 
-| Disponível nesta Alpha                         | Planejado para etapas seguintes                |
+| Disponível nesta versão                        | Planejado para etapas seguintes                |
 | ---------------------------------------------- | ---------------------------------------------- |
 | Campo de treino local em 3D                    | IA de personagens e combate                    |
 | Câmera FPS, seis movimentos e colisões         | Campanha e missões narrativas                  |
@@ -121,7 +123,7 @@ O proprietário precisa configurar:
 
 ## Combate e partidas locais
 
-Primária automática e secundária semiautomática têm carregadores independentes, tempos de recarga próprios e troca pelas teclas 1/2. Há recuo de câmera, dispersão por movimento, salto e rajada, mais estabilidade agachado/deitado, clarão e áudio com camada de ruído. A reserva continua infinita no treino. As armas continuam modelos procedurais simples; não são assets realistas finalizados.
+Primária automática e secundária semiautomática têm carregadores independentes, tempos de recarga próprios e troca pelas teclas 1/2. Há recuo de câmera, dispersão por movimento, salto e rajada, mais estabilidade agachado/deitado, clarão e áudio com camada de ruído. As reservas agora são finitas: carabina 30/90 e pistola 12/100. As armas continuam modelos procedurais simples; não são assets realistas finalizados.
 
 **Partidas locais:** crie ou entre numa sala com código, até oito participantes incluindo zero a quatro bots. Há arena compartilhada, dano, morte e reaparecimento controlados por servidor. Consulte [como iniciar e publicar o servidor](server/README.md). O servidor ainda não está hospedado; o preview Vercel sozinho não oferece partidas online.
 
@@ -131,4 +133,10 @@ Primária automática e secundária semiautomática têm carregadores independen
 
 Use LOGAR com usuário/e-mail e senha. CADASTRAR solicita e-mail, username (3–20 letras, números ou _) e senha de pelo menos 8 caracteres; ao concluir, volta para LOGAR. A sessão é persistida pelo SDK. Veja [as configurações obrigatórias de contas](supabase/README.md) para desligar confirmação de e-mail e instalar a função de login por username. Não confundir guardar senha no gerenciador Google com login social Google.
 
-O botão **JOGAR COM BOTS NESTE COMPUTADOR** usa a simulação local no navegador e não exige iniciar/hospedar o servidor WebSocket. Escolha a quantidade no seletor Bots. A pausa interrompe essa simulação; salas multiplayer continuam exigindo servidor. Há carabina e pistola nas teclas 1/2, e a arena é distinta do Complexo Ferro do treino. O rodapé mostra `BETA · CONTAS + BOTS LOCAIS · 27/10` para reconhecer a versão atualizada.
+O botão **JOGAR COM BOTS NESTE COMPUTADOR** usa a simulação local no navegador e não exige iniciar/hospedar o servidor WebSocket. Escolha a quantidade no seletor Bots. A pausa interrompe essa simulação; salas multiplayer continuam exigindo servidor. Há carabina e pistola nas teclas 1/2, e a arena é distinta do Complexo Ferro do treino. O rodapé mostra `TACTICAL FPS · CLASSIC FEEL 0.2` para reconhecer a versão atualizada.
+
+## Movimento e HUD clássicos (0.2)
+
+A alteração `feat/classic-game-feel` adiciona aceleração/atrito, counter-strafing, air-strafe, spray determinístico, deploy e recarga compartilhados entre cliente/servidor, HUD compacto com radar, mira dinâmica/fixa, compra com saldo real, colete, impactos e passos. **Shift agora anda; WASD corre por padrão.** Pressione **B** e use **1–5** para comprar; fora da compra **1/2** trocam arma.
+
+Consulte [diagnóstico, código modular, parâmetros, limites e aplicação passo a passo](docs/CLASSIC-FEEL.md). Essa implementação própria usa a base de movimento GoldSrc como referência; não foi validada como réplica 1:1 de CS 1.6. O protocolo de salas mudou para **2**, exigindo atualização conjunta do servidor e frontend. O GDD 1.4 permanece preservado.

@@ -12,13 +12,15 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
   root.parent = camera;
   root.position = new Vector3(0.23, -0.24, 0.55);
   root.scaling.setAll(0.65);
-  const metal = new StandardMaterial('carbine-gunmetal', scene);
+  const material = (name: string) =>
+    (scene.getMaterialByName(name) as StandardMaterial | null) ?? new StandardMaterial(name, scene);
+  const metal = material('carbine-gunmetal');
   metal.diffuseColor = Color3.FromHexString('#272e2b');
   metal.specularColor.set(0.3, 0.3, 0.3);
-  const grip = new StandardMaterial('carbine-olive-polymer', scene);
+  const grip = material('carbine-olive-polymer');
   grip.diffuseColor = Color3.FromHexString('#555a3f');
   grip.specularColor.set(0.04, 0.04, 0.04);
-  const sight = new StandardMaterial('carbine-sight', scene);
+  const sight = material('carbine-sight');
   sight.diffuseColor = Color3.FromHexString('#b6cd77');
   sight.emissiveColor.set(0.3, 0.4, 0.15);
   const part = (name: string, size: number[], position: number[], mat: StandardMaterial) => {
@@ -35,7 +37,7 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
     mesh.renderingGroupId = 1;
     return mesh;
   };
-  const glove = new StandardMaterial('operator-gloves', scene);
+  const glove = material('operator-gloves');
   glove.diffuseColor = Color3.FromHexString('#6d7059');
   glove.specularColor.set(0.02, 0.02, 0.02);
   part('trigger-hand', [0.09, 0.12, 0.12], [0.025, -0.16, -0.12], glove);
@@ -49,7 +51,7 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
     part('pistol-rear-sight', [0.055, 0.022, 0.025], [0, 0.065, -0.1], metal);
     part('support-hand', [0.09, 0.095, 0.1], [-0.045, -0.135, -0.04], glove);
     const flash = part('muzzle-flash', [0.09, 0.06, 0.12], [0, 0.015, 0.24], sight);
-    const fire = new StandardMaterial('pistol-muzzle-light', scene);
+    const fire = material('pistol-muzzle-light');
     fire.emissiveColor.set(1, 0.65, 0.1);
     fire.disableLighting = true;
     flash.material = fire;
@@ -80,7 +82,7 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
   barrel.alwaysSelectAsActiveMesh = true;
   barrel.renderingGroupId = 1;
   const flash = part('muzzle-flash', [0.1, 0.06, 0.16], [0, 0.005, pistol ? 0.2 : 0.72], sight);
-  const fire = new StandardMaterial('muzzle-light', scene);
+  const fire = material('muzzle-light');
   fire.emissiveColor.set(1, 0.65, 0.1);
   fire.disableLighting = true;
   flash.material = fire;

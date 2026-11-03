@@ -22,7 +22,7 @@ test('secondary weapon is semi automatic and magazines remain separate', async (
   await expect(page.locator('#hud')).toBeVisible();
   await page.keyboard.press('2');
   await expect(page.locator('.hud-ammo .label')).toHaveText('PISTOLA P-09');
-  await page.waitForTimeout(300);
+  await expect(page.locator('#hud')).toHaveAttribute('data-deploying', 'false');
   await page.mouse.down();
   await page.waitForTimeout(700);
   await page.mouse.up();

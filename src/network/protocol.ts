@@ -1,9 +1,16 @@
+import type { WeaponState } from '../game/weapons';
+import { SHOP, type BuyItem } from '../game/shop';
 import type { MovementInput, Vec3 } from '../game/physics';
 import type { WeaponSlot } from '../game/ballistics';
+export const PROTOCOL_VERSION = 2 as const;
 export interface MatchInput extends MovementInput {
   yaw: number;
   pitch: number;
   fire: boolean;
+  fireSequence: number;
+  reloadSequence: number;
+  buySequence: number;
+  buyItem: BuyItem | null;
   reload: boolean;
   weapon: WeaponSlot;
 }
@@ -13,13 +20,24 @@ export interface ActorState {
   position: Vec3;
   yaw: number;
   stance: MovementInput['stance'];
+  velocity: Vec3;
+  grounded: boolean;
   health: number;
+  armor: number;
+  money: number;
+  buyAllowed: boolean;
+  buyMessage: string;
+  buySequence: number;
+  weaponState: WeaponState;
+  shots: number;
+  hits: number;
   kills: number;
   deaths: number;
   ammo: number;
   weapon: WeaponSlot;
 }
 export interface MatchState {
+  protocol: typeof PROTOCOL_VERSION;
   type: 'state';
   room: string;
   self: string;
@@ -34,6 +52,10 @@ export const IDLE_INPUT: MatchInput = {
   yaw: 0,
   pitch: 0,
   fire: false,
+  fireSequence: 0,
+  reloadSequence: 0,
+  buySequence: 0,
+  buyItem: null,
   reload: false,
   weapon: 'primary',
 };
@@ -53,7 +75,23 @@ export function parseInput(value: unknown): MatchInput | null {
     return null;
   if (!['sprint', 'jump', 'fire', 'reload'].every((key) => typeof x[key] === 'boolean'))
     return null;
+  for (const key of ['fireSequence', 'buySequence', 'reloadSequence'])
+    if (
+      x[key] !== undefined &&
+      (!Number.isSafeInteger(x[key]) || (x[key] as number) < 0 || (x[key] as number) > 1e9)
+    )
+      return null;
+  if (
+    x.buyItem !== undefined &&
+    x.buyItem !== null &&
+    (typeof x.buyItem !== 'string' || !Object.hasOwn(SHOP, x.buyItem))
+  )
+    return null;
   return {
+    reloadSequence: (x.reloadSequence as number | undefined) ?? 0,
+    fireSequence: (x.fireSequence as number | undefined) ?? 0,
+    buySequence: (x.buySequence as number | undefined) ?? 0,
+    buyItem: (x.buyItem as BuyItem | null | undefined) ?? null,
     forward: Math.max(-1, Math.min(1, x.forward as number)),
     right: Math.max(-1, Math.min(1, x.right as number)),
     yaw: (x.yaw as number) % (Math.PI * 2),

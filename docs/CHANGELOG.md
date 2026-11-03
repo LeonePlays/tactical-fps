@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 — Classic Feel
+
+- Velocidade horizontal com aceleração, atrito, counter-strafe e air-strafe; Shift passa a andar.
+- Spray determinístico, punch de câmera separado da mira, deploy por arma e reserva finita.
+- Um controlador de armas para navegador e servidor; comandos rápidos sequenciados.
+- HUD compacto com radar Canvas 2D, cruz dinâmica/fixa, dinheiro, colete, munição e compra por teclado.
+- Compras autorizadas por área/tempo/saldo, e preservação de munição nas recargas.
+- Pool de marcas de bala, passos por distância e áudio com buffer de ruído compartilhado.
+- Protocolo de salas 2 e mensagem explícita para versões incompatíveis.
+- Diagnóstico, referência técnica, valores ajustáveis e integração em `CLASSIC-FEEL.md`.
+
 ## 0.1.0 — Primeira versão jogável
 
 - TypeScript, Vite e Babylon.js, com lockfile e configuração de frontend para Vercel.

@@ -28,16 +28,20 @@ test('two real sockets join one room with bots; invalid tokens fail; empty rooms
   try {
     const bad = await connect();
     const denied = waitMessage(bad);
-    bad.send(JSON.stringify({ type: 'join', token: 'bad', create: true, bots: 0 }));
+    bad.send(JSON.stringify({ type: 'join', protocol: 2, token: 'bad', create: true, bots: 0 }));
     expect((await denied).type).toBe('error');
     const first = await connect();
     const created = waitMessage(first);
-    first.send(JSON.stringify({ type: 'join', token: 'valid-one', create: true, bots: 2 }));
+    first.send(
+      JSON.stringify({ type: 'join', protocol: 2, token: 'valid-one', create: true, bots: 2 }),
+    );
     const state = (await created) as unknown as MatchState;
     expect(state.actors).toHaveLength(3);
     const second = await connect();
     const joined = waitMessage(second);
-    second.send(JSON.stringify({ type: 'join', token: 'valid-two', room: state.room }));
+    second.send(
+      JSON.stringify({ type: 'join', protocol: 2, token: 'valid-two', room: state.room }),
+    );
     const snapshot = (await joined) as unknown as MatchState;
     expect(snapshot.room).toBe(state.room);
     expect(snapshot.actors).toHaveLength(4);

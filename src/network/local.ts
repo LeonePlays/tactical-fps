@@ -7,7 +7,7 @@ export function localPractice(bots: number, state: (snapshot: MatchState) => voi
   for (let i = 0; i < Math.max(0, Math.min(4, bots)); i++) match.add(`bot-${i}`, true);
   const timer = setInterval(() => {
     if (document.pointerLockElement) match.step(0.05);
-    state({ type: 'state', room: 'LOCAL', self, actors: match.snapshot() });
+    state({ protocol: 2, type: 'state', room: 'LOCAL', self, actors: match.snapshot() });
   }, 50);
   return {
     send(input: MatchInput) {

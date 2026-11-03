@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Match } from './match';
-import { parseInput } from '../src/network/protocol';
+import { PROTOCOL_VERSION, parseInput } from '../src/network/protocol';
 export type Verify = (token: string) => Promise<string | null>;
 export const verifySupabase: Verify = async (token) => {
   try {
@@ -33,7 +33,7 @@ export function createMatchServer(
   const http = createServer((req, res) => {
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+      res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, rooms: rooms.size }));
     } else {
       res.writeHead(404);
       res.end();
@@ -74,6 +74,8 @@ export function createMatchServer(
           return;
         }
         if (authenticating) return;
+        if (data.protocol !== PROTOCOL_VERSION)
+          throw new Error('Versão incompatível. Atualize o jogo e o servidor.');
         if (data.type !== 'join' || typeof data.token !== 'string' || data.token.length > 4096)
           throw new Error('Conexão inválida.');
         authenticating = true;
@@ -107,7 +109,15 @@ export function createMatchServer(
         }
         clearTimeout(timeout);
         clients.set(ws, { id, room, last: Date.now(), count: 0, window: Date.now() });
-        ws.send(JSON.stringify({ type: 'state', room, self: id, actors: match.snapshot() }));
+        ws.send(
+          JSON.stringify({
+            protocol: PROTOCOL_VERSION,
+            type: 'state',
+            room,
+            self: id,
+            actors: match.snapshot(),
+          }),
+        );
       } catch (error) {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(
@@ -151,6 +161,7 @@ export function createMatchServer(
       if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 65536)
         ws.send(
           JSON.stringify({
+            protocol: PROTOCOL_VERSION,
             type: 'state',
             room: c.room,
             self: c.id,

@@ -2,7 +2,7 @@
 
 ## Escopo
 
-Alpha 0.1 entrega treino individual em navegador de computador. O planejamento GDD 1.4 permanece como referência; `GDD.md` foi preservado como recebido. Esta documentação registra somente as decisões desta implementação.
+Classic Feel 0.2 entrega treino individual em navegador de computador. O planejamento GDD 1.4 permanece como referência; `GDD.md` foi preservado como recebido. Esta documentação registra somente as decisões desta implementação.
 
 ## Fluxo em execução
 
@@ -10,7 +10,7 @@ Alpha 0.1 entrega treino individual em navegador de computador. O planejamento G
 
 `world.ts` constrói o Complexo Ferro com primitivas Babylon.js e texturas originais geradas localmente, com semente fixa. O armazém A é acessível; a expedição B é um bloco de cenário fechado. O perímetro é fechado. Caixas de colisão acompanham a geometria sólida; sinalizações, faixas, arma e decoração não criam obstáculos. Há seis alvos sinalizados em laranja, com reaparecimento em quatro segundos. Raios de disparo respeitam a oclusão do cenário. Não há download de modelos, CDN ou fontes; Supabase é usado para autenticação e salvamento.
 
-`physics.ts` é independente da renderização: corpo cinemático de base quadrada, coordenadas nos pés, gravidade e colisão AABB por eixo com subdivisão temporal em até 1/120 s. Normalização impede vantagem diagonal. Movimento relativo ao yaw funciona igualmente nas três posturas. A altura de colisão muda imediatamente, enquanto a câmera suaviza a transição. Teto bloqueia a mudança para postura mais alta; salto não funciona deitado e exige nova pressão após o salto anterior. A forma de colisão não pretende simular uma cápsula anatômica ou corpo deitado completo.
+`physics.ts` é independente da renderização: corpo cinemático de base quadrada, coordenadas nos pés, gravidade e colisão AABB por eixo com subdivisão temporal em até 1/120 s. Normalização impede vantagem diagonal no chão. Movimento relativo ao yaw usa velocidade acumulada, aceleração, atrito e controle aéreo por projeção; Shift anda. A altura de colisão muda imediatamente, enquanto a câmera suaviza a transição. Teto bloqueia a mudança para postura mais alta; salto não funciona deitado e exige nova pressão após o salto anterior. A forma de colisão não pretende simular uma cápsula anatômica ou corpo deitado completo.
 
 O passo por frame é limitado para evitar teletransporte após travamentos. Em máquinas muito lentas o tempo de simulação pode progredir mais lentamente que o relógio real. A opção de qualidade baixa ajuda máquinas com GPU limitada.
 
@@ -39,3 +39,7 @@ A Vercel publica somente `dist/`; `server/` contém um processo persistente sepa
 `server/server.ts` autentica WebSockets, gerencia salas efêmeras e transmite estado a 20 Hz. `server/match.ts` simula movimento, bots e tiros. `src/network/arena.ts` compartilha colisões com a cena; `protocol.ts` valida entradas. O cliente envia intenção, nunca posições ou acertos. Há previsão local simples com correção direta por snapshots; não há interpolação avançada, compensação de latência nem reconexão com preservação de placar.
 
 A arena é separada do Complexo Ferro de treino, para manter geometria e colisões iguais no servidor e navegador. Auth real exige acesso ao Supabase; testes injetam um verificador isolado. Consulte `server/README.md` para os comandos, limites e publicação futura.
+
+## Atualização Classic Feel
+
+`docs/CLASSIC-FEEL.md` documenta o diagnóstico, referência consultada, parâmetros e integração. `WeaponController` concentra regras de tiro/inventário no cliente e servidor. O HUD está em `ui/classic-hud.ts` e `styles/classic.css`; o radar usa Canvas 2D. `ImpactPool` limita marcas a 64 meshes. O áudio reutiliza o buffer de ruído e desconecta nós após os efeitos. O protocolo 2 inclui estado autoritativo de inventário/economia e sequências de comandos. A compra e o dano são validados no servidor.

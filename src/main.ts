@@ -1,9 +1,10 @@
 import { localPractice } from './network/local';
 import type { MatchState } from './network/protocol';
 import { connectRoom } from './network/connection';
-import { WEAPONS } from './game/ballistics';
+import { ClassicHud } from './ui/classic-hud';
 import { mountAccount } from './auth/account';
 import './styles/main.css';
+import './styles/classic.css';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from './core/settings';
 import { renderView } from './ui/view';
 import type { Game, GameSnapshot } from './game/game';
@@ -13,7 +14,7 @@ if (!root) throw new Error('App root is missing');
 renderView(root);
 const buildBadge = document.createElement('span');
 buildBadge.className = 'build-badge';
-buildBadge.textContent = 'BETA · CONTAS + BOTS LOCAIS · 27/10';
+buildBadge.textContent = 'TACTICAL FPS · CLASSIC FEEL 0.2';
 document.querySelector('.menu-footer')!.append(buildBadge);
 const el = <T extends HTMLElement = HTMLElement>(id: string) => {
   const node = document.getElementById(id);
@@ -24,6 +25,7 @@ const canvas = el<HTMLCanvasElement>('game-canvas');
 const menu = el('menu-shell');
 const hud = el('hud');
 const pause = el('pause-overlay');
+const classicHud = new ClassicHud(hud);
 const settingsOverlay = el('settings-overlay');
 const controlsOverlay = el('controls-overlay');
 const form = el<HTMLFormElement>('settings-form');
@@ -109,45 +111,8 @@ function onLockChange(locked: boolean): void {
 
 function updateHud(state: GameSnapshot): void {
   latestSnapshot = state;
-  hud.dataset.weaponVisible = String(state.weaponVisible);
-  document.querySelector('.hud-ammo .label')!.textContent = WEAPONS[state.weapon].name;
-  document.querySelector('.hud-ammo div > span')!.textContent =
-    `/ ${WEAPONS[state.weapon].capacity}`;
-  el('ammo-count').textContent = String(state.ammo).padStart(2, '0');
   const own = roomReady ? latestRoom?.actors.find((a) => a.id === latestRoom?.self) : undefined;
-  document.querySelector('.hud-score .label')!.textContent = roomReady
-    ? 'ELIMINAÇÕES'
-    : 'ALVOS ATINGIDOS';
-  el('hit-count').textContent = String(own?.kills ?? state.hits).padStart(2, '0');
-  el('accuracy').textContent = state.shots
-    ? `${Math.round((state.hits / state.shots) * 100)}%`
-    : '—';
-  el('session-time').textContent = `${Math.floor(state.elapsed / 60)
-    .toString()
-    .padStart(2, '0')}:${Math.floor(state.elapsed % 60)
-    .toString()
-    .padStart(2, '0')}`;
-  el('stance-label').textContent = { standing: 'EM PÉ', crouching: 'AGACHADO', prone: 'DEITADO' }[
-    state.stance
-  ];
-  el('movement-label').textContent = state.sprinting
-    ? 'CORRENDO'
-    : !state.grounded
-      ? 'NO AR'
-      : 'EM OPERAÇÃO';
-  el('reload-label').textContent = state.reloading ? 'RECARREGANDO…' : 'R · RECARREGAR / ∞ RESERVA';
-  const bearing = ((((state.yaw * 180) / Math.PI) % 360) + 360) % 360;
-  el('bearing').textContent = `${Math.round(bearing).toString().padStart(3, '0')}°`;
-  el('coordinates').textContent =
-    `X ${state.position.x.toFixed(1)} / Z ${state.position.z.toFixed(1)}`;
-  el('fps-counter').textContent = `${state.fps} FPS`;
-  el('fps-counter').hidden = !settings.showFps;
-  el('hit-marker').hidden = !state.hit;
-  // Read-only observability for browser regression tests and developer inspection.
-  hud.dataset.elapsed = String(state.elapsed);
-  hud.dataset.position = JSON.stringify(state.position);
-  hud.dataset.stance = state.stance;
-  hud.dataset.grounded = String(state.grounded);
+  classicHud.update(state, settings.showFps, own?.kills, settings.dynamicCrosshair);
 }
 
 function fillSettings(value: Settings): void {
@@ -156,7 +121,7 @@ function fillSettings(value: Settings): void {
       value[key],
     );
   }
-  for (const key of ['invertY', 'showFps'] as const)
+  for (const key of ['invertY', 'showFps', 'dynamicCrosshair'] as const)
     (form.elements.namedItem(key) as HTMLInputElement).checked = value[key];
   updateOutputs();
 }
@@ -265,6 +230,7 @@ form.addEventListener('submit', (event) => {
     quality: input('quality').value === 'low' ? 'low' : 'high',
     invertY: input('invertY').checked,
     showFps: input('showFps').checked,
+    dynamicCrosshair: input('dynamicCrosshair').checked,
   };
   game?.applySettings(settings);
   account.save({ settings });
@@ -364,9 +330,6 @@ async function joinRoom(create: boolean, local = false) {
         el('room-message').textContent = local
           ? `TREINO COM ${state.actors.filter((a) => a.bot).length} BOTS · neste computador, sem servidor de salas.`
           : `SALA ${state.room} · ${state.actors.filter((a) => !a.bot).length} jogadores · ${state.actors.filter((a) => a.bot).length} bots. Compartilhe o código.`;
-        document.querySelector('.health-icon + strong')!.firstChild!.textContent = String(
-          own?.health || 0,
-        );
         el('training-tip').textContent =
           own?.health === 0
             ? 'ELIMINADO — REAPARECIMENTO EM 3 SEGUNDOS'
@@ -410,7 +373,7 @@ el('disconnect-room').addEventListener('click', () => {
   latestRoom = undefined;
   delete hud.dataset.room;
   delete hud.dataset.actors;
-  document.querySelector('.health-icon + strong')!.firstChild!.textContent = '100';
+  el('health-count').textContent = '100';
   el('room-message').textContent = 'Desconectado.';
   void boot();
 });

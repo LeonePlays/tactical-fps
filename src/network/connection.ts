@@ -1,4 +1,4 @@
-import type { MatchInput, MatchState } from './protocol';
+import { PROTOCOL_VERSION, type MatchInput, type MatchState } from './protocol';
 export function connectRoom(options: {
   url: string;
   token: string;
@@ -30,6 +30,7 @@ export function connectRoom(options: {
     ws.send(
       JSON.stringify({
         type: 'join',
+        protocol: PROTOCOL_VERSION,
         token: options.token,
         create: options.create,
         bots: options.bots,
@@ -39,6 +40,11 @@ export function connectRoom(options: {
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      if (data.type === 'state' && data.protocol !== PROTOCOL_VERSION) {
+        message = 'Servidor desatualizado. Atualize o frontend e o servidor juntos.';
+        ws.close();
+        return;
+      }
       if (data.type === 'error') {
         message = String(data.message);
         options.closed(message);

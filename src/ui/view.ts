@@ -26,7 +26,7 @@ export function renderView(root: HTMLElement): void {
       <div class="menu-content">
         <header class="topbar">
           <a href="#" class="wordmark" data-action="home">TACTICAL<span>FPS</span><small>INDEPENDENT TACTICAL EXPERIENCE</small></a>
-          <div class="topbar-right"><span class="status-dot"></span> SESSÃO LOCAL <span class="version">ALPHA 0.1</span></div>
+          <div class="topbar-right"><span class="status-dot"></span> SESSÃO LOCAL <span class="version">CLASSIC 0.2</span></div>
         </header>
         <nav class="tabs" aria-label="Menu">
           <button class="active" data-action="play-tab">JOGAR <span>01</span></button>
@@ -51,16 +51,19 @@ export function renderView(root: HTMLElement): void {
       </div>
     </div>
     <div id="hud" hidden aria-label="Dados da sessão">
-      <div class="hud-top-left"><span class="label">TREINO LIVRE</span><strong>COMPLEXO FERRO</strong><span class="hud-session"><i></i> SESSÃO LOCAL <span id="session-time">00:00</span></span></div>
-      <div class="compass"><span>NO</span><span>N</span><b id="bearing">000°</b><span>NE</span><span>L</span></div>
+      <canvas id="radar" width="144" height="144" aria-label="Radar local: terreno e contatos visíveis próximos"></canvas>
+      <div class="hud-top-left"><span class="label">TREINO LIVRE</span><strong>COMPLEXO FERRO</strong><span class="hud-session">TEMPO DE SESSÃO <span id="session-time">00:00</span></span></div>
+      <div class="compass"><b id="bearing">000°</b></div>
       <div class="hud-score"><span class="label">ALVOS ATINGIDOS</span><strong id="hit-count">00</strong><small>PRECISÃO <span id="accuracy">—</span></small></div>
-      <div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i><span></span></div>
+      <div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <div id="hit-marker" hidden aria-hidden="true">×</div>
-      <div id="training-tip" class="training-tip">SEU TREINO, SEU RITMO <span>Explore o complexo e acerte os alvos laranja. Eles retornam após 4 segundos.</span></div>
-      <div class="hud-bottom-left"><div class="health-icon">+</div><strong>100<small>SAÚDE</small></strong><div class="hud-divider"></div><div class="stance-indicator"><b id="stance-label">EM PÉ</b><span id="movement-label">PRONTO</span></div></div>
-      <div class="hud-bottom-center"><span>CTRL <b>AGACHAR</b></span><span>Z <b>DEITAR</b></span><span>ESC <b>PAUSAR</b></span></div>
-      <div class="hud-ammo"><span class="label">CARABINA T-04</span><div><strong id="ammo-count">30</strong><span>/ 30</span></div><small id="reload-label">R · RECARREGAR <span>∞ RESERVA</span></small></div>
+      <div id="training-tip" class="training-tip">WASD correr · SHIFT andar · B comprar · R recarregar</div>
+      <div class="hud-bottom-left"><div class="health-icon">+</div><strong><span id="health-count">100</span><small>VIDA</small></strong><span class="armor-icon">◇</span><strong><span id="armor-count">0</span><small>COLETE</small></strong><div class="stance-indicator"><b id="stance-label">EM PÉ</b><span id="movement-label">PRONTO</span></div></div>
+      <div id="money-count" aria-label="Dinheiro">$16000</div>
+      <div class="hud-bottom-center"><span>B <b>COMPRAR</b></span><span>1 / 2 <b>ARMAS</b></span><span>ESC <b>PAUSAR</b></span></div>
+      <div class="hud-ammo"><span class="label">CARABINA T-04</span><div><strong id="ammo-count">30</strong><span>/ <b id="reserve-count">90</b></span></div><small id="reload-label">R · RECARREGAR</small></div>
       <div class="hud-coordinates"><span id="coordinates">X 0 / Z -22</span><span id="fps-counter" hidden></span></div>
+      <aside id="buy-panel" hidden role="dialog" aria-modal="true" aria-labelledby="buy-title"><h2 id="buy-title">COMPRAR EQUIPAMENTO</h2><p>Use as teclas 1–5 · B para fechar</p><ol><li>Carabina T-04 <b>$2700</b></li><li>Pistola P-09 <b>$500</b></li><li>Munição primária (30) <b>$60</b></li><li>Munição secundária (12) <b>$25</b></li><li>Colete <b>$650</b></li></ol><p id="buy-zone"></p><p id="buy-message" role="status"></p></aside>
     </div>
     <div id="pause-overlay" class="overlay" hidden>
       <section class="pause-panel" role="dialog" aria-modal="true" aria-labelledby="pause-title">
@@ -82,7 +85,7 @@ export function renderView(root: HTMLElement): void {
           <label class="setting-row"><span>Volume dos efeitos<small>Disparos, recarga e acertos</small></span><div class="slider-control"><input name="volume" aria-label="Volume dos efeitos" type="range" min="0" max="1" step="0.05"><output id="volume-value"></output></div></label>
           <label class="setting-row"><span>Qualidade gráfica<small>Baixa desativa sombras e reduz a resolução</small></span><select name="quality" aria-label="Qualidade gráfica"><option value="high">ALTA</option><option value="low">BAIXA</option></select></label>
           <label class="setting-row"><span>Inverter eixo vertical</span><input name="invertY" type="checkbox" role="switch"></label>
-          <label class="setting-row"><span>Mostrar FPS</span><input name="showFps" type="checkbox" role="switch"></label>
+          <label class="setting-row"><span>Mira dinâmica<small>Desative para uma cruz de tamanho fixo</small></span><input name="dynamicCrosshair" type="checkbox" role="switch"></label><label class="setting-row"><span>Mostrar FPS</span><input name="showFps" type="checkbox" role="switch"></label>
           <div class="dialog-actions"><button type="button" class="button text-button" data-action="defaults">RESTAURAR PADRÃO</button><button type="submit" class="button primary">SALVAR AJUSTES ${arrow}</button></div>
           <p id="settings-message" class="dialog-note" role="status">Os ajustes são salvos neste navegador.</p>
         </form>
@@ -94,12 +97,12 @@ export function renderView(root: HTMLElement): void {
         <div class="controls-grid">
           <div><span class="key-group"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><b>MOVIMENTAR</b></div>
           <div><span class="key-group"><kbd>MOUSE</kbd></span><b>OLHAR / MIRAR</b></div>
-          <div><span class="key-group"><kbd>SHIFT</kbd> + <kbd>W</kbd></span><b>CORRER</b></div>
+          <div><span class="key-group"><kbd>SHIFT</kbd> + <kbd>W</kbd></span><b>ANDAR SILENCIOSAMENTE</b></div>
           <div><span class="key-group"><kbd>CTRL</kbd></span><b>AGACHAR / LEVANTAR</b></div>
           <div><span class="key-group"><kbd>Z</kbd></span><b>DEITAR / LEVANTAR</b></div>
           <div><span class="key-group"><kbd>ESPAÇO</kbd></span><b>SALTAR</b></div>
           <div><span class="key-group"><kbd>CLIQUE ESQUERDO</kbd></span><b>DISPARAR</b></div>
-          <div><span class="key-group"><kbd>R</kbd></span><b>RECARREGAR</b></div>
+          <div><span class="key-group"><kbd>R</kbd></span><b>RECARREGAR</b></div><div><span class="key-group"><kbd>B</kbd></span><b>COMPRAR (TECLAS 1–5)</b></div>
           <div><span class="key-group"><kbd>ESC</kbd></span><b>LIBERAR MOUSE / PAUSAR</b></div>
         </div>
         <p class="control-note">Clique em iniciar para capturar o mouse. Use <kbd>ESC</kbd> para liberá-lo. Agachar e deitar são alternáveis; o teto precisa estar livre para levantar. Não é possível saltar deitado.</p>

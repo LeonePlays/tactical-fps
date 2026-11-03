@@ -44,6 +44,7 @@ test('settings persist, controls are documented, and desktop identity is correct
   await page.getByRole('slider', { name: 'Campo de visão', exact: true }).fill('100');
   await page.getByRole('combobox', { name: 'Qualidade gráfica' }).selectOption('low');
   await page.getByRole('switch', { name: 'Mostrar FPS' }).check();
+  await page.getByRole('switch', { name: 'Mira dinâmica' }).uncheck();
   await page.getByRole('button', { name: 'SALVAR AJUSTES' }).click();
   await expect(page.locator('#settings-overlay')).toBeHidden();
   await expect(page.locator('#account-status')).toHaveText('DADOS SALVOS NA CONTA');
@@ -54,6 +55,7 @@ test('settings persist, controls are documented, and desktop identity is correct
     '100',
   );
   await expect(page.getByRole('combobox', { name: 'Qualidade gráfica' })).toHaveValue('low');
+  await expect(page.getByRole('switch', { name: 'Mira dinâmica' })).not.toBeChecked();
   await page.getByRole('button', { name: 'Fechar configurações' }).click();
   await page.getByRole('button', { name: 'Controles', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'CONTROLES', exact: true })).toBeVisible();
@@ -63,7 +65,7 @@ test('settings persist, controls are documented, and desktop identity is correct
   expect(errors).toEqual([]);
 });
 
-test('WebGL scene is playable: pointer lock, targets, WASD, sprint, stances, jump, pause and reset', async ({
+test('WebGL scene is playable: pointer lock, targets, WASD, Shift walking, stances, jump, pause and reset', async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -87,7 +89,7 @@ test('WebGL scene is playable: pointer lock, targets, WASD, sprint, stances, jum
   await hold(page, 'w');
   await page.keyboard.up('Shift');
   const sprinted = await position(page);
-  expect(sprinted.z - walked.z).toBeGreaterThan(walked.z - before.z);
+  expect(sprinted.z - walked.z).toBeLessThan(walked.z - before.z);
   await hold(page, 'd', 450);
   expect((await position(page)).x).toBeGreaterThan(sprinted.x + 0.4);
   await page.keyboard.press('Control');

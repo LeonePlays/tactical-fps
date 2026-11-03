@@ -17,7 +17,18 @@ export interface MovementInput {
   stance: Stance;
 }
 export const HEIGHT: Record<Stance, number> = { standing: 1.8, crouching: 1.12, prone: 0.55 };
-export const SPEED = { walk: 4.2, sprint: 7, crouching: 2.2, prone: 1.15 };
+// Metres/second, scaled from a 250 units/s classic run at 0.0254 m/unit.
+export const SPEED = { run: 6.35, walk: 3.302, crouching: 2.117, prone: 1.15 };
+export const MOVEMENT = {
+  groundAcceleration: 5,
+  airAcceleration: 10,
+  friction: 4,
+  stopSpeed: 1.905,
+  airWishCap: 0.762,
+  gravity: 20.32,
+  jumpSpeed: 6.8,
+  maxAirSpeed: 50.8,
+} as const;
 const RADIUS = 0.3;
 const EPSILON = 0.00001;
 
@@ -33,6 +44,8 @@ export class PlayerBody {
   stance: Stance = 'standing';
   grounded = false;
   velocityY = 0;
+  velocityX = 0;
+  velocityZ = 0;
   moving = false;
   sprinting = false;
   private jumpHeld = false;
@@ -42,6 +55,10 @@ export class PlayerBody {
     spawn: Vec3,
   ) {
     this.position = { ...spawn };
+  }
+
+  get speed() {
+    return Math.hypot(this.velocityX, this.velocityZ);
   }
 
   get height() {
@@ -68,36 +85,61 @@ export class PlayerBody {
 
   step(input: MovementInput, yaw: number, elapsed: number): void {
     if (this.canUseStance(input.stance)) this.stance = input.stance;
+    const dt = Number.isFinite(elapsed) ? Math.max(0, Math.min(elapsed, 0.1)) : 0;
+    if (!dt) return;
     const wantsJump = input.jump && !this.jumpHeld;
     this.jumpHeld = input.jump;
     if (wantsJump && this.grounded && this.stance !== 'prone') {
-      this.velocityY = this.stance === 'crouching' ? 4.5 : 6.8;
+      this.velocityY = this.stance === 'crouching' ? 4.5 : MOVEMENT.jumpSpeed;
       this.grounded = false;
     }
-    const norm = Math.max(1, Math.hypot(input.forward, input.right));
-    this.moving = norm > 0 && (input.forward !== 0 || input.right !== 0);
-    this.sprinting = input.sprint && this.stance === 'standing' && input.forward > 0 && this.moving;
-    const speed =
+    // sprint is retained as a wire field for compatibility; Shift now means walk.
+    const maxSpeed =
       this.stance === 'prone'
         ? SPEED.prone
         : this.stance === 'crouching'
           ? SPEED.crouching
-          : this.sprinting
-            ? SPEED.sprint
-            : SPEED.walk;
-    const dx = ((Math.sin(yaw) * input.forward + Math.cos(yaw) * input.right) / norm) * speed;
-    const dz = ((Math.cos(yaw) * input.forward - Math.sin(yaw) * input.right) / norm) * speed;
-    // Substeps prevent tunnelling through thin geometry even after a slow frame.
-    const dt = Math.max(0, Math.min(elapsed, 0.1));
-    const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
+          : input.sprint
+            ? SPEED.walk
+            : SPEED.run;
+    const magnitude = Math.hypot(input.forward, input.right);
+    const norm = Math.max(1, magnitude);
+    const wishX = (Math.sin(yaw) * input.forward + Math.cos(yaw) * input.right) / (magnitude || 1);
+    const wishZ = (Math.cos(yaw) * input.forward - Math.sin(yaw) * input.right) / (magnitude || 1);
+    const wishSpeed = (maxSpeed * magnitude) / norm;
+    const steps = Math.max(1, Math.ceil(dt * 120));
     for (let i = 0; i < steps; i++) {
       const sub = dt / steps;
-      this.moveAxis('x', dx * sub);
-      this.moveAxis('z', dz * sub);
-      this.velocityY -= 22 * sub;
+      if (this.grounded) {
+        const speed = this.speed;
+        const nextSpeed = Math.max(
+          0,
+          speed - Math.max(speed, Math.min(MOVEMENT.stopSpeed, maxSpeed)) * MOVEMENT.friction * sub,
+        );
+        const scale = speed > 0 ? nextSpeed / speed : 0;
+        this.velocityX *= scale;
+        this.velocityZ *= scale;
+      }
+      const current = this.velocityX * wishX + this.velocityZ * wishZ;
+      const cappedWish = this.grounded ? wishSpeed : Math.min(wishSpeed, MOVEMENT.airWishCap);
+      const add = Math.max(0, cappedWish - current);
+      const acceleration = this.grounded ? MOVEMENT.groundAcceleration : MOVEMENT.airAcceleration;
+      const amount = Math.min(add, acceleration * wishSpeed * sub);
+      this.velocityX += wishX * amount;
+      this.velocityZ += wishZ * amount;
+      if (this.speed > MOVEMENT.maxAirSpeed) {
+        const scale = MOVEMENT.maxAirSpeed / this.speed;
+        this.velocityX *= scale;
+        this.velocityZ *= scale;
+      }
+      this.moveAxis('x', this.velocityX * sub);
+      this.moveAxis('z', this.velocityZ * sub);
+      this.velocityY -= MOVEMENT.gravity * sub;
       this.grounded = false;
       this.moveVertical(this.velocityY * sub);
     }
+    this.moving = this.speed > 0.1;
+    this.sprinting = this.stance === 'standing' && !input.sprint && this.moving;
   }
 
   private moveAxis(axis: 'x' | 'z', amount: number): void {
@@ -106,6 +148,10 @@ export class PlayerBody {
       if (!this.overlaps(this.position, solid)) continue;
       if (amount > 0) this.position[axis] = solid.min[axis] - RADIUS;
       if (amount < 0) this.position[axis] = solid.max[axis] + RADIUS;
+      if (amount !== 0) {
+        if (axis === 'x') this.velocityX = 0;
+        else this.velocityZ = 0;
+      }
     }
   }
 

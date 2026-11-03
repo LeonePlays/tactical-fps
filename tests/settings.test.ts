@@ -28,6 +28,7 @@ describe('persisted user settings', () => {
       quality: 'high',
       invertY: false,
       showFps: true,
+      dynamicCrosshair: true,
     });
   });
   it('loads a valid saved configuration', () => {
@@ -38,6 +39,7 @@ describe('persisted user settings', () => {
       quality: 'low',
       invertY: true,
       showFps: false,
+      dynamicCrosshair: false,
     };
     expect(parseSettings(JSON.stringify(settings))).toEqual(settings);
   });

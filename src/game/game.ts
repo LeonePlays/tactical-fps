@@ -3,7 +3,10 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { MatchInput, MatchState } from '../network/protocol';
-import { WEAPONS, spread, type WeaponSlot } from './ballistics';
+import { seedFor, spreadFor, type WeaponSlot } from './ballistics';
+import { WeaponController } from './weapons';
+import { buy, SHOP, type BuyItem } from './shop';
+import { ImpactPool } from './impacts';
 import { Camera } from '@babylonjs/core/Cameras/camera';
 import { Engine } from '@babylonjs/core/Engines/engine';
 import { Ray } from '@babylonjs/core/Culling/ray';
@@ -20,6 +23,20 @@ import type { Settings } from '../core/settings';
 export interface GameSnapshot {
   weapon: WeaponSlot;
   weaponVisible: boolean;
+  fov: number;
+  reserve: number;
+  health: number;
+  armor: number;
+  money: number;
+  buying: boolean;
+  buyAllowed: boolean;
+  buyMessage: string;
+  deploying: boolean;
+  spread: number;
+  speed: number;
+  impacts: number;
+  radarSolids: World['solids'];
+  contacts: { x: number; z: number }[];
   ammo: number;
   hits: number;
   shots: number;
@@ -46,11 +63,23 @@ export class Game {
   private readonly menuCamera: UniversalCamera;
   private readonly world: World;
   private weapon: TransformNode;
-  private slot: WeaponSlot = 'primary';
-  private magazines = { primary: 30, secondary: 12 };
-  private heat = 0;
+  private gun = new WeaponController();
+  private get slot() {
+    return this.gun.slot;
+  }
   private flashUntil = 0;
-  private fireUntil = 0;
+  private fireSequence = 0;
+  private reloadSequence = 0;
+  private purchaseSequence = 0;
+  private purchaseItem: BuyItem | null = null;
+  private buying = false;
+  private wallet = { money: 16000, armor: 0 };
+  private buyAllowed = true;
+  private buyMessage = '';
+  private contacts: { x: number; z: number }[] = [];
+  private stepDistance = 0;
+  private impactCount = 0;
+  private readonly impacts: ImpactPool;
   private netTimer = 0;
   private matchHealth = 100;
   private receivedMatch = false;
@@ -66,11 +95,8 @@ export class Game {
   private yaw = 0;
   private pitch = 0;
   private elapsed = 0;
-  private ammo = 30;
   private hits = 0;
   private shots = 0;
-  private reloadUntil = 0;
-  private nextShotAt = 0;
   private hitUntil = 0;
   private trigger = false;
   private recoil = 0;
@@ -105,6 +131,7 @@ export class Game {
     this.menuCamera.setTarget(new Vector3(-1, 2, 5));
     this.world = createWorld(this.scene, online);
     this.body = new PlayerBody(this.world.solids, this.world.spawn);
+    this.impacts = new ImpactPool(this.scene);
     this.weapon = createWeapon(this.scene, this.camera);
     this.weapon.setEnabled(false);
     this.scene.activeCamera = this.menuCamera;
@@ -123,6 +150,7 @@ export class Game {
         this.active = document.pointerLockElement === this.canvas;
         this.keys.clear();
         this.trigger = false;
+        this.buying = false;
         if (this.active) {
           this.hasStarted = true;
           this.scene.activeCamera = this.camera;
@@ -169,13 +197,31 @@ export class Game {
           ].includes(event.code)
         )
           event.preventDefault();
+        if (event.code === 'KeyB' && !event.repeat) {
+          event.preventDefault();
+          this.buying = !this.buying;
+          this.keys.clear();
+          this.trigger = false;
+          this.emitSnapshot();
+          return;
+        }
+        if (this.buying) {
+          event.preventDefault();
+          const items = Object.keys(SHOP) as BuyItem[];
+          const index = Number(event.code.replace('Digit', '')) - 1;
+          if (!event.repeat && items[index]) this.purchase(items[index]);
+          return;
+        }
         this.keys.add(event.code);
         if (event.repeat) return;
         if (event.code === 'ControlLeft' || event.code === 'ControlRight')
           this.requestedStance = this.requestedStance === 'crouching' ? 'standing' : 'crouching';
         if (event.code === 'KeyZ')
           this.requestedStance = this.requestedStance === 'prone' ? 'standing' : 'prone';
-        if (event.code === 'KeyR') this.reload();
+        if (event.code === 'KeyR') {
+          this.reloadSequence++;
+          this.reload();
+        }
         if (event.code === 'Digit1') this.switchWeapon('primary');
         if (event.code === 'Digit2') this.switchWeapon('secondary');
       },
@@ -187,7 +233,9 @@ export class Game {
       (event) => {
         if (!this.active) return;
         if (event.button === 0) {
+          if (this.buying) return;
           this.trigger = true;
+          this.fireSequence++;
           this.shoot();
         }
       },
@@ -253,6 +301,7 @@ export class Game {
   pause(): void {
     this.keys.clear();
     this.trigger = false;
+    this.buying = false;
     if (document.pointerLockElement === this.canvas) document.exitPointerLock();
   }
 
@@ -263,14 +312,18 @@ export class Game {
     this.yaw = 0;
     this.pitch = 0;
     this.elapsed = 0;
-    this.switchWeapon('primary');
-    this.magazines = { primary: 30, secondary: 12 };
-    this.ammo = 30;
-    this.heat = 0;
+    const oldSlot = this.slot;
+    this.gun = new WeaponController();
+    this.wallet = { money: 16000, armor: 0 };
+    this.buyAllowed = true;
+    this.buyMessage = '';
+    this.buying = false;
+    if (oldSlot !== this.slot) this.replaceWeapon();
     this.hits = 0;
     this.shots = 0;
-    this.reloadUntil = 0;
-    this.nextShotAt = 0;
+    this.stepDistance = 0;
+    this.impactCount = 0;
+    this.impacts.clear();
     this.hitUntil = 0;
     this.recoil = 0;
     for (const target of this.world.targets) {
@@ -300,58 +353,61 @@ export class Game {
     this.engine.resize();
   }
 
-  private switchWeapon(slot: WeaponSlot): void {
-    this.magazines[this.slot] = this.ammo;
-    this.slot = slot;
-    this.ammo = this.magazines[slot];
-    this.reloadUntil = 0;
-    this.trigger = false;
-    this.nextShotAt = this.elapsed + 0.25;
+  private replaceWeapon(): void {
     this.weapon.dispose();
-    this.weapon = createWeapon(this.scene, this.camera, slot === 'secondary');
+    this.weapon = createWeapon(this.scene, this.camera, this.slot === 'secondary');
+    this.weapon.setEnabled(this.hasStarted);
+  }
+
+  private switchWeapon(slot: WeaponSlot): void {
+    if (!this.gun.switch(slot, this.elapsed)) {
+      if (!this.gun.inventory[slot].owned) this.buyMessage = 'B · Compre a arma na área inicial.';
+      return;
+    }
+    this.trigger = false;
+    this.replaceWeapon();
+    this.emitSnapshot();
+  }
+
+  private purchase(item: BuyItem): void {
+    this.purchaseSequence++;
+    this.purchaseItem = item;
+    if (this.online) this.buyMessage = 'Aguardando confirmação da compra…';
+    else this.buyMessage = buy(this.gun, this.wallet, item, this.buyAllowed);
     this.emitSnapshot();
   }
 
   private reload(): void {
-    if (this.reloadUntil || this.ammo === WEAPONS[this.slot].capacity) return;
-    this.reloadUntil = this.elapsed + WEAPONS[this.slot].reload;
-    this.audio.play('reload');
+    if (this.gun.reload(this.elapsed)) this.audio.play('reload');
   }
 
   private shoot(): void {
-    if (this.online && this.matchHealth <= 0) return;
-    if (!this.active || this.reloadUntil || this.elapsed < this.nextShotAt) return;
-    if (!this.ammo) {
+    if (!this.active || this.buying || (this.online && this.matchHealth <= 0)) return;
+    if (this.gun.ammo === 0) {
       this.reload();
       return;
     }
-    this.ammo--;
+    const shot = this.gun.fire(
+      this.elapsed,
+      this.trigger,
+      this.fireSequence,
+      { yaw: this.yaw, pitch: this.pitch },
+      { speed: this.body.speed, grounded: this.body.grounded, stance: this.body.stance },
+    );
+    if (!shot) return;
     this.shots++;
-    const spec = WEAPONS[this.slot];
-    this.nextShotAt = this.elapsed + spec.interval;
-    if (!spec.automatic) this.trigger = false;
     this.flashUntil = this.elapsed + 0.045;
-    this.fireUntil = this.elapsed + 0.075;
     this.recoil = 1;
-    this.audio.play('shot');
-    const aimSpread =
-      !this.body.moving && this.body.grounded && this.heat === 0
-        ? 0
-        : spread(this.body.moving, this.body.grounded, this.body.stance, this.heat);
-    const direction = this.camera.getForwardRay().direction.clone();
-    direction.x += (Math.random() - 0.5) * aimSpread;
-    direction.y += (Math.random() - 0.5) * aimSpread;
-    direction.normalize();
-    this.heat = Math.min(6, this.heat + 1);
-    this.pitch = Math.max(-1.48, this.pitch - spec.kick);
-    this.yaw += (Math.random() - 0.5) * spec.kick * 0.35;
-    const ray = new Ray(this.camera.globalPosition.clone(), direction, 100);
+    this.audio.play('shot', this.slot);
+    this.syncCamera(1);
+    const direction = new Vector3(shot.direction.x, shot.direction.y, shot.direction.z);
+    const ray = new Ray(this.camera.position.clone(), direction, 100);
     const picked = this.scene.pickWithRay(
       ray,
       (mesh) => mesh.isEnabled() && mesh.isPickable && mesh.isVisible,
     );
     const id = getTargetId(picked?.pickedMesh ?? null);
-    if (id !== undefined) {
+    if (id !== undefined && !this.online) {
       const target = this.world.targets[id];
       if (target.downUntil === 0) {
         target.downUntil = this.elapsed + 4;
@@ -361,6 +417,13 @@ export class Game {
         this.hitUntil = this.elapsed + 0.2;
         this.audio.play('hit');
       }
+    } else if (picked?.hit && picked.pickedPoint && picked.pickedMesh?.isVisible) {
+      const normal = picked.getNormal(true);
+      if (normal) {
+        this.impacts.add(picked.pickedPoint, normal, this.elapsed);
+        this.impactCount++;
+        this.audio.play('impact');
+      }
     }
     this.emitSnapshot();
   }
@@ -369,11 +432,16 @@ export class Game {
     const dt = Math.min(this.engine.getDeltaTime() / 1000, 0.05);
     if (this.active) {
       this.elapsed += dt;
+      const wasGrounded = this.body.grounded;
+      const beforeX = this.body.position.x,
+        beforeZ = this.body.position.z;
       if (!this.online || this.matchHealth > 0)
         this.body.step(
           {
-            forward: Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')),
-            right: Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')),
+            forward: this.buying
+              ? 0
+              : Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')),
+            right: this.buying ? 0 : Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')),
             sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
             jump: this.keys.has('Space'),
             stance: this.requestedStance,
@@ -381,11 +449,24 @@ export class Game {
           this.yaw,
           dt,
         );
+      this.gun.update(this.elapsed, dt);
       this.syncCamera(1 - Math.exp(-18 * dt));
-      if (this.reloadUntil && this.elapsed >= this.reloadUntil) {
-        this.ammo = WEAPONS[this.slot].capacity;
-        this.reloadUntil = 0;
+      this.stepDistance += Math.hypot(
+        this.body.position.x - beforeX,
+        this.body.position.z - beforeZ,
+      );
+      if (this.body.grounded && this.body.sprinting && this.stepDistance > 1.25) {
+        this.audio.play('step');
+        this.stepDistance = 0;
       }
+      if (!wasGrounded && this.body.grounded) this.audio.play('land');
+      if (!this.online)
+        this.buyAllowed =
+          this.elapsed <= 90 &&
+          Math.hypot(
+            this.body.position.x - this.world.spawn.x,
+            this.body.position.z - this.world.spawn.z,
+          ) <= 6;
       if (this.trigger) this.shoot();
       for (const target of this.world.targets) {
         if (target.downUntil && this.elapsed >= target.downUntil) {
@@ -394,7 +475,7 @@ export class Game {
           this.world.shadows.getShadowMap()?.resetRefreshCounter();
         }
       }
-      this.heat = Math.max(0, this.heat - dt * 4);
+      this.impacts.update(this.elapsed);
       this.weapon
         .getChildMeshes()
         .find((mesh) => mesh.name === 'muzzle-flash')
@@ -404,9 +485,9 @@ export class Game {
         this.body.moving && this.body.grounded
           ? Math.sin(this.elapsed * (this.body.sprinting ? 15 : 10)) * 0.007
           : 0;
-      this.weapon.position.y = -0.24 + bob - (this.reloadUntil ? 0.18 : 0);
+      this.weapon.position.y = -0.24 + bob - (this.gun.reloading ? 0.18 : 0);
       this.weapon.position.z = 0.55 - this.recoil * 0.035;
-      this.weapon.rotation.x = -this.recoil * 0.07 + (this.reloadUntil ? -0.5 : 0);
+      this.weapon.rotation.x = -this.recoil * 0.07 + (this.gun.reloading ? -0.5 : 0);
     } else if (!this.hasStarted) {
       this.menuCamera.position.x = 29 + Math.sin(performance.now() * 0.00004) * 1.4;
       this.menuCamera.setTarget(new Vector3(-1, 2, 5));
@@ -415,7 +496,7 @@ export class Game {
       this.netTimer += dt;
       if (this.netTimer >= 0.05) {
         this.netTimer = 0;
-        const active = this.active && this.matchHealth > 0;
+        const active = this.active && !this.buying && this.matchHealth > 0;
         this.events.onInput?.({
           forward: active ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) : 0,
           right: active ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) : 0,
@@ -424,7 +505,11 @@ export class Game {
           stance: this.requestedStance,
           yaw: this.yaw,
           pitch: this.pitch,
-          fire: active && (this.trigger || this.elapsed < this.fireUntil),
+          fire: active && this.trigger,
+          fireSequence: this.fireSequence,
+          reloadSequence: this.reloadSequence,
+          buySequence: this.purchaseSequence,
+          buyItem: this.purchaseItem,
           reload: active && this.keys.has('KeyR'),
           weapon: this.slot,
         });
@@ -442,6 +527,31 @@ export class Game {
     const own = state.actors.find((a) => a.id === state.self);
     if (!own) return;
     this.body.position = { ...own.position };
+    this.body.velocityX = own.velocity.x;
+    this.body.velocityY = own.velocity.y;
+    this.body.velocityZ = own.velocity.z;
+    this.body.grounded = own.grounded;
+    this.body.stance = own.stance;
+    this.contacts = state.actors
+      .filter((a) => a.id !== state.self && a.health > 0)
+      .map((a) => ({ x: a.position.x, z: a.position.z }));
+    this.wallet = { money: own.money, armor: own.armor };
+    this.buyAllowed = own.buyAllowed;
+    if (own.buySequence === this.purchaseSequence) this.buyMessage = own.buyMessage;
+    const respawn = !this.receivedMatch || (this.matchHealth <= 0 && own.health > 0);
+    if (respawn) {
+      this.gun = new WeaponController(seedFor(own.id) + own.deaths);
+      this.gun.slot = own.weapon;
+      this.gun.resetTrigger(this.fireSequence);
+      this.replaceWeapon();
+    }
+    if (own.weapon === this.slot) this.gun.reconcile(own.weaponState, this.elapsed);
+    if (own.hits > this.hits) {
+      this.hitUntil = this.elapsed + 0.2;
+      this.audio.play('hit');
+    }
+    this.hits = own.hits;
+    this.shots = own.shots;
     if (!this.receivedMatch || (this.matchHealth <= 0 && own.health > 0)) {
       this.yaw = own.yaw;
       this.pitch = 0;
@@ -449,7 +559,6 @@ export class Game {
     }
     this.receivedMatch = true;
     this.matchHealth = own.health;
-    if (own.weapon === this.slot) this.ammo = own.ammo;
     for (const actor of state.actors) {
       if (actor.id === state.self) continue;
       let mesh = this.remotes.get(actor.id);
@@ -496,7 +605,7 @@ export class Game {
     this.camera.position.z = this.body.position.z;
     const targetHeight = this.body.position.y + this.body.eyeHeight;
     this.camera.position.y += (targetHeight - this.camera.position.y) * smoothing;
-    this.camera.rotation.set(this.pitch, this.yaw, 0);
+    this.camera.rotation.set(this.pitch + this.gun.recoil.pitch, this.yaw + this.gun.recoil.yaw, 0);
   }
 
   private emitSnapshot(): void {
@@ -505,11 +614,28 @@ export class Game {
       weaponVisible: this.weapon
         .getChildMeshes()
         .some((mesh) => mesh.isEnabled() && this.scene.getActiveMeshes().indexOf(mesh) >= 0),
-      ammo: this.ammo,
+      fov: this.settings.fov,
+      reserve: this.gun.reserve,
+      health: this.matchHealth,
+      armor: this.wallet.armor,
+      money: this.wallet.money,
+      buying: this.buying,
+      buyAllowed: this.buyAllowed,
+      buyMessage: this.buyMessage,
+      deploying: this.gun.isDeploying(this.elapsed),
+      speed: this.body.speed,
+      spread: spreadFor(
+        { speed: this.body.speed, grounded: this.body.grounded, stance: this.body.stance },
+        this.gun.burst,
+      ),
+      impacts: this.impactCount,
+      radarSolids: this.world.solids,
+      contacts: this.contacts,
+      ammo: this.gun.ammo,
       hits: this.hits,
       shots: this.shots,
       elapsed: this.elapsed,
-      reloading: this.reloadUntil > 0,
+      reloading: this.gun.reloading,
       stance: this.body.stance,
       grounded: this.body.grounded,
       sprinting: this.body.sprinting,

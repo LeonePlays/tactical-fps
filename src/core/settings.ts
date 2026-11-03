@@ -5,6 +5,7 @@ export interface Settings {
   quality: 'high' | 'low';
   invertY: boolean;
   showFps: boolean;
+  dynamicCrosshair: boolean;
 }
 export const DEFAULT_SETTINGS: Readonly<Settings> = {
   sensitivity: 1,
@@ -13,6 +14,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   quality: 'high',
   invertY: false,
   showFps: false,
+  dynamicCrosshair: true,
 };
 export const SETTINGS_KEY = 'tactical-fps.settings.v1';
 
@@ -33,6 +35,7 @@ export function parseSettings(raw: string | null): Settings {
       quality: value.quality === 'low' ? 'low' : 'high',
       invertY: value.invertY === true,
       showFps: value.showFps === true,
+      dynamicCrosshair: value.dynamicCrosshair !== false,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
