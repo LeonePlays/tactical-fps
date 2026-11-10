@@ -9,6 +9,7 @@ test('two browsers share an arena with bots and can return to individual trainin
   await page.goto('/');
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
   await page.locator('.local-lobby summary').click();
+  await page.locator('#room-bots').selectOption('2');
   await page.locator('#room-server').fill('ws://127.0.0.1:3002');
   await page.locator('#create-room').click();
   await expect(page.locator('#room-message')).toContainText('SALA');
@@ -47,6 +48,7 @@ test('bots run in this browser without a WebSocket server', async ({ page }) => 
   page.on('websocket', () => sockets++);
   await page.goto('/');
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
+  await page.locator('#room-bots').selectOption('2');
   await page.locator('#local-bots').click();
   await expect(page.locator('#hud')).toHaveAttribute('data-room', 'LOCAL');
   await expect(page.locator('#hud')).toHaveAttribute('data-actors', '3');
@@ -59,4 +61,23 @@ test('bots run in this browser without a WebSocket server', async ({ page }) => 
   await page.waitForTimeout(500);
   await page.screenshot({ path: '/tmp/tactical-local-bots.png' });
   expect(sockets).toBe(0);
+});
+
+test('an unavailable multiplayer server does not block returning to local bots', async ({
+  page,
+}) => {
+  await accountFixture(page);
+  await page.goto('/');
+  await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
+  await page.locator('.local-lobby summary').click();
+  await page.locator('#room-server').fill('ws://127.0.0.1:39999');
+  await page.locator('#create-room').click();
+  await expect(page.locator('#error-banner')).toContainText('conectar');
+  await expect(page.locator('#local-bots')).toBeEnabled();
+  await page.locator('#local-bots').click();
+  await expect(page.locator('#hud')).toHaveAttribute('data-room', 'LOCAL');
+  await expect(page.locator('#start-button')).toBeEnabled();
+  await page.locator('#start-button').click();
+  await expect(page.locator('#hud')).toBeVisible();
+  await expect(page.locator('#error-banner')).toBeHidden();
 });

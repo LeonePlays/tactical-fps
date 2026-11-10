@@ -94,7 +94,9 @@ export function createMatchServer(
           do {
             room = randomBytes(3).toString('hex').toUpperCase();
           } while (rooms.has(room));
-          match = new Match();
+          if (data.mode !== undefined && !['deathmatch', 'defuse'].includes(data.mode))
+            throw new Error('Modo inválido.');
+          match = new Match(data.mode ?? 'deathmatch');
           match.add(id);
           for (let i = 0; i < data.bots; i++) match.add(`bot-${i}`, true);
           rooms.set(room, match);
@@ -116,6 +118,7 @@ export function createMatchServer(
             room,
             self: id,
             actors: match.snapshot(),
+            ...match.state(),
           }),
         );
       } catch (error) {
@@ -166,6 +169,7 @@ export function createMatchServer(
             room: c.room,
             self: c.id,
             actors: rooms.get(c.room)?.snapshot() || [],
+            ...rooms.get(c.room)!.state(),
           }),
         );
     }

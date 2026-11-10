@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { accountFixture } from './account-fixture';
-test('login gates training and logout removes access', async ({ page }) => {
+test('optional login blocks input while open and logout returns to guest', async ({ page }) => {
   await accountFixture(page, false);
   await page.goto('/');
+  await expect(page.locator('.account-overlay')).toBeHidden();
+  await page.locator('#account-open').click();
   await expect(page.locator('.account-overlay')).toBeVisible();
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
   await page.locator('#start-button').evaluate((button: HTMLButtonElement) => button.click());
@@ -12,7 +14,8 @@ test('login gates training and logout removes access', async ({ page }) => {
   await page.getByRole('button', { name: 'ENTRAR', exact: true }).click();
   await expect(page.locator('.account-overlay')).toBeHidden();
   await page.getByRole('button', { name: 'SAIR DA CONTA' }).click();
-  await expect(page.locator('.account-overlay')).toBeVisible();
+  await expect(page.locator('.account-overlay')).toBeHidden();
+  await expect(page.locator('#account-status')).toContainText('VISITANTE');
 });
 test('secondary weapon is semi automatic and magazines remain separate', async ({ page }) => {
   await accountFixture(page);
@@ -53,6 +56,7 @@ test('signup has username rules, returns to login, and a later visit restores th
 }) => {
   await accountFixture(page, false);
   await page.goto('/');
+  await page.locator('#account-open').click();
   await page.getByRole('button', { name: 'CADASTRAR', exact: true }).click();
   await page.getByLabel('E-mail', { exact: true }).fill('test@example.com');
   await page.getByLabel('Nome de usuário', { exact: true }).fill('test_player');
@@ -104,6 +108,7 @@ for (const failure of [
       }),
     );
     await page.goto('/');
+    await page.locator('#account-open').click();
     await page.getByRole('button', { name: 'CADASTRAR', exact: true }).click();
     await page.getByLabel('E-mail', { exact: true }).fill('test@example.com');
     await page.getByLabel('Nome de usuário', { exact: true }).fill('test_player');
@@ -130,6 +135,7 @@ test('successful signup is not reported as failed when signing out the automatic
     }),
   );
   await page.goto('/');
+  await page.locator('#account-open').click();
   await page.getByRole('button', { name: 'CADASTRAR', exact: true }).click();
   await page.getByLabel('E-mail', { exact: true }).fill('test@example.com');
   await page.getByLabel('Nome de usuário', { exact: true }).fill('test_player');

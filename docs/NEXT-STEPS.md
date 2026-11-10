@@ -1,28 +1,24 @@
-# Próximas entregas do TACTICAL FPS
+# TACTICAL FPS — estado da beta 0.3
 
-## Entrega atual
+## Entregue
 
-- Supabase Auth: cadastro, login, recuperação e logout; treino exige conta.
-- Configurações e resumo do último treino salvos nos metadados da conta.
-- Carabina automática e pistola semiautomática, carregadores separados, troca 1/2.
-- Recuo de câmera, dispersão por postura/movimento/rajada, clarão e áudio sintetizado em camadas.
-- Modelos de armas continuam procedurais; avaliação visual e sonora pelo jogador continua necessária.
+- Visitante joga treino e partidas locais sem conta e sem Supabase.
+- Combate livre, três bots por padrão, resultado, reinício e retorno ao menu.
+- Bomba por equipes, preparação, plantio/desarme e melhor de cinco.
+- Movimento com aceleração/atrito, air-strafe, agachamento/deitado e colisões.
+- Carabina/pistola, recuo, munição finita, faca, HE e compra de equipamento.
+- Bots com reação, linha de visão e navegação; humanoides com posturas e caminhada.
+- Frontend Vercel e servidor autoritativo local com protocolo 3, jogadores e bots juntos.
+- Persistência de ajustes/resumos no navegador; contas reais têm armazenamento separado.
 
-## Dependências externas pendentes
+## Dependências externas
 
-- Desativar Confirm email, aplicar a migração de usernames e publicar username-login; ver `supabase/README.md`. SMTP é necessário para recuperar senha, não para cadastrar sem confirmação.
-- Tornar o endereço Vercel público; validar em janela anônima.
-- Validar autenticação com e-mail real: testes automatizados usam interceptação da API.
-- Bots individuais já rodam no navegador; publicar depois o servidor para salas entre jogadores, conforme `server/README.md`. A Vercel estática não executa esse processo.
-- Confirmar CI e deployment pelo GitHub/Vercel; a rede do ambiente retornou 403 nas consultas HTTP/API. O push Git funcionou.
+O domínio Supabase fornecido retorna NXDOMAIN, confirmado em 10/11/2026. Restaurar o projeto ou configurar URL/chave publicável de projeto ativo. Desativar Confirm email, aplicar migração de usernames e publicar username-login conforme `supabase/README.md`. SMTP só é necessário para recuperação. Testes simulados de contas não comprovam o serviço real. O jogo local permanece disponível.
 
-## Escopo ainda não implementado
+O servidor multiplayer foi preparado para executar localmente e publicar depois, conforme solicitado; ver `server/README.md`. Precisa de conta válida, processo persistente e TLS/WSS para frontend HTTPS. Bots individuais não exigem esse servidor.
 
-- Faca, granadas, equipamentos e bomba.
-- Regras por equipes e rodadas; dano, morte e reaparecimento já existem na arena local.
-- Melhorar bots: hoje perseguem, deslocam-se lateralmente e disparam; faltam navegação e decisões táticas.
-- Publicação das salas; criação/entrada por código e jogadores/bots juntos já funcionam localmente.
-- Melhorar previsão/interpolação e reconexão; servidor local autoritativo e testes entre dois clientes foram adicionados.
-- Melhorias adicionais na postura deitado e assets/animações finais.
+## Planejamento posterior
 
-Preservar o GDD 1.4. Histórico competitivo deverá usar banco com RLS e resultados validados pelo servidor; metadados editáveis do usuário não são adequados para ranking.
+Campanha narrativa, mapas urbano/porto, assets/animações finais, escolha de equipe/dificuldade, matchmaking, ranking validado no servidor, chat/voz, compensação de latência e reconexão com placar. Validar carga antes de hospedar competição pública.
+
+Preservar GDD 1.4. Metadados editáveis de usuário não devem ser usados como ranking competitivo.

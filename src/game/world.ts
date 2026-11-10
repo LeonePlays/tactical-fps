@@ -187,6 +187,10 @@ export function createWorld(scene: Scene, arena = false): World {
   }
 
   if (arena) {
+    scene.clearColor = Color4.FromHexString('#94b2beff');
+    scene.fogColor = Color3.FromHexString('#b5c0bc');
+    ambient.intensity = 0.86;
+    sun.intensity = 1.45;
     for (const b of ARENA_BLOCKS)
       block(
         b.name,
@@ -196,12 +200,136 @@ export function createWorld(scene: Scene, arena = false): World {
         b.w,
         b.h,
         b.d,
-        b.name === 'floor' ? ground : b.name.startsWith('crate') ? wood : concrete,
+        b.name === 'floor'
+          ? ground
+          : b.name.startsWith('crate')
+            ? wood
+            : b.name === 'cover-a'
+              ? green
+              : b.name === 'cover-b'
+                ? rust
+                : concrete,
       );
-    for (const { mesh } of staticMeshes) shadows.addShadowCaster(mesh);
-    for (const x of [-10, 0, 10]) block('gantry-column', x, 4.3, 15.6, 0.3, 2.4, 0.3, steel, false);
-    block('gantry-crossbeam', 0, 5.4, 15.6, 31, 0.3, 0.4, steel, false);
-    sign('FERRO / ARENA LOCAL', 0, 3, 15.4, 8, 1.2);
+    // Scenery never adds collision volumes or intercepts authoritative bullet rays.
+    const detail = (
+      name: string,
+      x: number,
+      y: number,
+      z: number,
+      w: number,
+      h: number,
+      d: number,
+      mat: StandardMaterial,
+    ) => {
+      const mesh = block(name, x, y, z, w, h, d, mat, false, false);
+      mesh.isPickable = false;
+      return mesh;
+    };
+    const arenaSign = (
+      text: string,
+      x: number,
+      y: number,
+      z: number,
+      width: number,
+      height: number,
+      facing = 0,
+    ) => {
+      sign(text, x, y, z, width, height, facing);
+      scene.getMeshByName(`sign-${text}`)!.isPickable = false;
+    };
+
+    // The two existing cover blocks read as battered steel freight modules.
+    for (const x of [-5, 5]) {
+      for (const side of [-1, 1]) {
+        detail('freight-top-rail', x + side * 1.46, 1.94, 0, 0.08, 0.12, 6, steel);
+        detail('freight-bottom-rail', x + side * 1.46, 0.09, 0, 0.08, 0.18, 6, steel);
+        for (const z of [-2.9, -1.45, 0, 1.45, 2.9])
+          detail('freight-panel-rib', x + side * 1.49, 1, z, 0.022, 1.8, 0.08, steel);
+        detail('freight-door-frame', x, 1.92, side * 2.97, 3, 0.16, 0.06, steel);
+        detail('freight-door-seam', x, 0.96, side * 2.995, 0.045, 1.76, 0.012, steel);
+        detail('freight-safety-tab', x + 0.94, 1.32, side * 2.995, 0.5, 0.17, 0.012, yellow);
+      }
+    }
+    for (const z of [-6, 6]) {
+      for (const x of [-1.36, 1.36]) detail('crate-steel-banding', x, 0.6, z, 0.11, 1.2, 2, steel);
+      for (const side of [-1, 1])
+        for (const y of [0.16, 0.44, 0.72, 1.02])
+          detail('crate-plank-edge', 0, y, z + side * 0.995, 2.94, 0.035, 0.012, pale);
+    }
+
+    for (const z of [-12, -9, -3, 0, 3, 9, 12])
+      for (const x of [-9, 9]) detail('yard-route-dash', x, 0.008, z, 0.09, 0.016, 1.3, yellow);
+    for (const z of [-13.6, 13.6]) {
+      detail('spawn-line', 0, 0.009, z, 27, 0.018, 0.11, pale);
+      for (const x of [-12, 0, 12])
+        detail('spawn-marker', x, 0.01, z > 0 ? 12 : -12, 2.2, 0.02, 0.08, pale);
+    }
+    for (const x of [-2.5, 2.5]) detail('site-A-outline', x, 0.012, 10, 0.12, 0.024, 5, yellow);
+    for (const z of [7.5, 12.5]) detail('site-A-outline', 0, 0.012, z, 5, 0.024, 0.12, yellow);
+    arenaSign('AREA A / CARGA', 0, 2.65, 15.45, 6.6, 0.85);
+    arenaSign('FERRO // 04', 0, 3, -15.45, 7, 1, Math.PI);
+    arenaSign('EXPEDICAO >', -15.45, 2.7, 0, 5, 0.8, -Math.PI / 2);
+    for (const x of [-10, 0, 10]) detail('gantry-column', x, 4.3, 15.6, 0.3, 2.4, 0.3, steel);
+    detail('gantry-crossbeam', 0, 5.4, 15.6, 31, 0.3, 0.4, steel);
+
+    // All factory silhouettes remain beyond the closed ±16 m arena boundary.
+    detail('north-factory', 0, 5, 27, 34, 10, 14, green);
+    detail('north-factory-roof', 0, 10.12, 27, 35, 0.24, 15, steel);
+    detail('west-machine-hall', -24, 4, 0, 12, 8, 31, rust);
+    detail('west-machine-hall-roof', -24, 8.15, 0, 13, 0.3, 32, steel);
+    detail('east-machinery', 25, 3.5, -3, 14, 7, 27, concrete);
+    detail('east-machinery-roof', 25, 7.15, -3, 15, 0.3, 28, steel);
+    for (let x = -14; x <= 14; x += 4) {
+      detail('factory-upper-window', x, 7.6, 19.96, 2.6, 1.25, 0.05, glass);
+      detail('factory-window-mullion', x, 7.6, 19.92, 0.08, 1.25, 0.05, steel);
+      detail('factory-panel-support', x, 5, 19.94, 0.14, 10, 0.08, steel);
+    }
+    arenaSign('COMPLEXO FERRO / EXPEDICAO', 0, 5.8, 19.88, 14, 1.1);
+    for (const [x, z, height] of [
+      [-24, 25, 22],
+      [-19, 34, 17],
+      [25, 23, 14],
+    ]) {
+      const chimney = MeshBuilder.CreateCylinder(
+        'factory-stack',
+        { diameter: 2.3, height, tessellation: 10 },
+        scene,
+      );
+      chimney.position.set(x, height / 2, z);
+      chimney.material = concrete;
+      chimney.isPickable = false;
+      staticMeshes.push({ mesh: chimney, castsShadow: false });
+      for (const y of [height - 1, height - 3.5]) {
+        const band = MeshBuilder.CreateCylinder(
+          'factory-stack-band',
+          { diameter: 2.34, height: 0.8, tessellation: 10 },
+          scene,
+        );
+        band.position.set(x, y, z);
+        band.material = rust;
+        band.isPickable = false;
+        staticMeshes.push({ mesh: band, castsShadow: false });
+      }
+    }
+    // Material/picking groups retain the original solid surfaces while batching scenery.
+    const groups = new Map<string, { meshes: Mesh[]; castsShadow: boolean; pickable: boolean }>();
+    for (const { mesh, castsShadow } of staticMeshes) {
+      const key = `${mesh.material!.id}:${castsShadow}:${mesh.isPickable}`;
+      const group = groups.get(key) ?? { meshes: [], castsShadow, pickable: mesh.isPickable };
+      group.meshes.push(mesh);
+      groups.set(key, group);
+    }
+    for (const [name, group] of groups) {
+      const merged = Mesh.MergeMeshes(group.meshes, true, true);
+      if (!merged) continue;
+      merged.name = `arena-static-${name}`;
+      merged.isPickable = group.pickable;
+      merged.receiveShadows = true;
+      merged.freezeWorldMatrix();
+      if (group.castsShadow) shadows.addShadowCaster(merged);
+    }
+    const shadowMap = shadows.getShadowMap();
+    if (shadowMap) shadowMap.refreshRate = 0;
     return { solids, targets: [], shadows, spawn: { x: -12, y: 0.05, z: -12 } };
   }
   block('yard-foundation', 0, -0.5, 0, 56, 1, 64, ground, true, false);

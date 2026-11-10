@@ -1,9 +1,11 @@
+import type { MatchMode } from '../game/rounds';
 import { PROTOCOL_VERSION, type MatchInput, type MatchState } from './protocol';
 export function connectRoom(options: {
   url: string;
   token: string;
   create: boolean;
   bots: number;
+  mode?: MatchMode;
   room: string;
   state: (state: MatchState) => void;
   closed: (message: string) => void;
@@ -34,6 +36,7 @@ export function connectRoom(options: {
         token: options.token,
         create: options.create,
         bots: options.bots,
+        mode: options.mode ?? 'deathmatch',
         room: options.room,
       }),
     );
