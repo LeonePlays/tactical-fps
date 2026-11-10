@@ -1,3 +1,4 @@
+import type { MatchMode } from './game/rounds';
 import { localPractice } from './network/local';
 import type { MatchState } from './network/protocol';
 import { connectRoom } from './network/connection';
@@ -14,7 +15,7 @@ if (!root) throw new Error('App root is missing');
 renderView(root);
 const buildBadge = document.createElement('span');
 buildBadge.className = 'build-badge';
-buildBadge.textContent = 'TACTICAL FPS · CLASSIC FEEL 0.2';
+buildBadge.textContent = 'TACTICAL FPS · BETA 0.3 · VISITANTE';
 document.querySelector('.menu-footer')!.append(buildBadge);
 const el = <T extends HTMLElement = HTMLElement>(id: string) => {
   const node = document.getElementById(id);
@@ -41,7 +42,7 @@ let localMode = false;
 let latestRoom: MatchState | undefined;
 const lobby = document.createElement('section');
 lobby.className = 'local-lobby';
-lobby.innerHTML = `<button id="local-bots" class="button primary">JOGAR COM BOTS NESTE COMPUTADOR</button><details><summary>SALAS COM JOGADORES E BOTS</summary><p>Inicie o servidor local para criar uma sala. Cada jogador precisa de uma conta.</p><label>Servidor <input id="room-server" aria-label="Servidor de partidas" value="ws://127.0.0.1:3001" maxlength="200"></label><label>Bots <select id="room-bots"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label><button id="create-room" class="button secondary">CRIAR SALA</button><label>Código <input id="room-code" maxlength="6" placeholder="ABC123"></label><button id="join-room" class="button secondary">ENTRAR NA SALA</button><button id="disconnect-room" class="button text-button">VOLTAR AO TREINO INDIVIDUAL</button><p id="room-message" role="status"></p></details>`;
+lobby.innerHTML = `<button id="local-bots" class="button primary">JOGAR COM BOTS NESTE COMPUTADOR</button><label>Modo <select id="match-mode"><option value="deathmatch">Combate livre · 3 min</option><option value="defuse">Bomba · equipes / melhor de 5</option></select></label><label>Bots <select id="room-bots"><option>0</option><option>1</option><option>2</option><option selected>3</option><option>4</option></select></label><details><summary>MULTIPLAYER · SERVIDOR PRÓPRIO</summary><p>Inicie o servidor local para criar uma sala. Cada jogador precisa de uma conta.</p><label>Servidor <input id="room-server" aria-label="Servidor de partidas" value="ws://127.0.0.1:3001" maxlength="200"></label><button id="create-room" class="button secondary">CRIAR SALA</button><label>Código <input id="room-code" maxlength="6" placeholder="ABC123"></label><button id="join-room" class="button secondary">ENTRAR NA SALA</button><button id="disconnect-room" class="button text-button">VOLTAR AO TREINO INDIVIDUAL</button><p id="room-message" role="status"></p></details>`;
 document.querySelector('.hero')!.append(lobby);
 el<HTMLInputElement>('room-server').value =
   import.meta.env.VITE_MATCH_SERVER_URL || 'ws://127.0.0.1:3001';
@@ -51,27 +52,16 @@ let inSession = false;
 let entering = false;
 let previousFocus: HTMLElement | null = null;
 let latestSnapshot: GameSnapshot | undefined;
+let accountId: string | undefined;
+let gameGeneration = 0;
 const account = mountAccount((user, cloudSettings) => {
-  settings = cloudSettings || { ...DEFAULT_SETTINGS };
+  settings = cloudSettings || loadSettings();
   game?.applySettings(settings);
-  if (!user) {
-    roomConnection?.close();
-    roomConnection = undefined;
-    connecting = false;
-    if (roomReady) {
-      roomReady = false;
-      game?.dispose();
-      game = undefined;
-      void boot();
-    }
-    inSession = false;
-    game?.showMenu();
-    hud.hidden = true;
-    pause.hidden = true;
-    menu.hidden = false;
-    settingsOverlay.hidden = true;
-    controlsOverlay.hidden = true;
-  }
+  const previousAccount = accountId;
+  accountId = user?.id;
+  // Local practice stays available across authentication changes.
+  if (previousAccount && previousAccount !== accountId && !localMode && roomConnection)
+    disconnectRoom();
 });
 function saveTraining() {
   if (!roomReady && inSession && latestSnapshot) {
@@ -90,6 +80,12 @@ function closeError(): void {
 }
 
 function onLockChange(locked: boolean): void {
+  if (!el('result-overlay').hidden) {
+    hud.hidden = true;
+    pause.hidden = true;
+    menu.hidden = true;
+    return;
+  }
   if (locked) inSession = true;
   hud.hidden = !locked;
   menu.hidden = inSession;
@@ -113,6 +109,19 @@ function updateHud(state: GameSnapshot): void {
   latestSnapshot = state;
   const own = roomReady ? latestRoom?.actors.find((a) => a.id === latestRoom?.self) : undefined;
   classicHud.update(state, settings.showFps, own?.kills, settings.dynamicCrosshair);
+  const round = latestRoom?.rounds;
+  if (roomReady && round) {
+    const sec = Math.ceil(round.remaining);
+    el('session-time').textContent = `${Math.floor(sec / 60)
+      .toString()
+      .padStart(2, '0')}:${(sec % 60).toString().padStart(2, '0')}`;
+    const progress = round.interaction;
+    el('objective-banner').textContent =
+      round.mode === 'defuse'
+        ? `${round.scores.alpha} : ${round.scores.bravo} · RODADA ${round.round} · ${round.phase === 'freeze' ? 'PREPARE-SE' : round.phase === 'round-over' ? round.reason : round.bomb?.status === 'planted' ? 'BOMBA ATIVA · DEFENDA OU DESARME' : own?.team === 'alpha' ? 'ALPHA · E para plantar na área A' : 'BRAVO · impeça o plantio / E para desarmar'}${progress ? ` · ${progress.action === 'plant' ? 'PLANTANDO' : 'DESARMANDO'} ${Math.round((progress.progress / progress.duration) * 100)}%` : ''}`
+        : `COMBATE LIVRE · primeiro a 10 eliminações / 3 minutos`;
+    el('objective-banner').hidden = false;
+  } else el('objective-banner').hidden = true;
 }
 
 function fillSettings(value: Settings): void {
@@ -137,7 +146,9 @@ function openDialog(kind: 'settings' | 'controls'): void {
   const overlay = kind === 'settings' ? settingsOverlay : controlsOverlay;
   if (kind === 'settings') {
     fillSettings(settings);
-    settingsMessage.textContent = 'Ajustes salvos na conta; confira o status no menu.';
+    settingsMessage.textContent = account.isGuest
+      ? 'Ajustes salvos somente neste navegador.'
+      : 'Ajustes salvos na conta; confira o status no menu.';
   }
   overlay.hidden = false;
   (overlay.querySelector('button') as HTMLButtonElement)?.focus();
@@ -177,6 +188,10 @@ root.addEventListener('click', (event) => {
   if (!target) return;
   event.preventDefault();
   switch (target.dataset.action) {
+    case 'quick-play':
+      if (roomReady) void enterGame();
+      else void joinRoom(true, true);
+      break;
     case 'start':
       void enterGame(true);
       break;
@@ -184,7 +199,10 @@ root.addEventListener('click', (event) => {
       void enterGame();
       break;
     case 'restart':
-      void enterGame(!roomReady);
+      if (roomReady && localMode) {
+        disconnectRoom(false);
+        void joinRoom(true, true);
+      } else void enterGame(!roomReady);
       break;
     case 'settings':
       openDialog('settings');
@@ -245,13 +263,18 @@ form.addEventListener('submit', (event) => {
 
 // Keep keyboard focus in the topmost open dialog, including the pause menu.
 document.addEventListener('keydown', (event) => {
-  const overlay = !controlsOverlay.hidden
-    ? controlsOverlay
-    : !settingsOverlay.hidden
-      ? settingsOverlay
-      : !pause.hidden
-        ? pause
-        : null;
+  const accountDialog = document.querySelector<HTMLElement>('.account-overlay:not([hidden])');
+  const overlay =
+    accountDialog ||
+    (!el('result-overlay').hidden
+      ? el('result-overlay')
+      : !controlsOverlay.hidden
+        ? controlsOverlay
+        : !settingsOverlay.hidden
+          ? settingsOverlay
+          : !pause.hidden
+            ? pause
+            : null);
   if (!overlay) return;
   if (event.key === 'Escape') {
     if (overlay === settingsOverlay) closeDialog('settings');
@@ -278,20 +301,36 @@ document.addEventListener('keydown', (event) => {
 async function joinRoom(create: boolean, local = false) {
   if (!account.canPlay || connecting || roomConnection) return;
   connecting = true;
+  startButton.disabled = true;
+  el<HTMLButtonElement>('quick-play').disabled = true;
+  el<HTMLButtonElement>('local-bots').disabled = true;
+  el('quick-play').textContent = 'PREPARANDO ARENA…';
   localMode = local;
   el('room-message').textContent = 'Conectando…';
   try {
-    const token = await account.token();
-    if (!token) throw new Error('Entre novamente na conta.');
+    const token = local ? '' : await account.token();
+    if (!local && !token) {
+      account.showLogin(
+        'Salas entre jogadores exigem uma conta e um servidor. Você pode jogar com bots como visitante.',
+      );
+      connecting = false;
+      startButton.disabled = !game;
+      el<HTMLButtonElement>('quick-play').disabled = false;
+      el<HTMLButtonElement>('local-bots').disabled = false;
+      el('quick-play').textContent = 'JOGAR AGORA · BOTS';
+      return;
+    }
     const { Game: GameClass } = await import('./game/game');
     const options = {
       url: el<HTMLInputElement>('room-server').value,
-      token,
+      token: token || '',
       create,
       bots: Number(el<HTMLSelectElement>('room-bots').value),
+      mode: el<HTMLSelectElement>('match-mode').value as MatchMode,
       room: el<HTMLInputElement>('room-code').value.trim().toUpperCase(),
       state: (state: MatchState) => {
         if (!roomReady) {
+          gameGeneration++;
           game?.dispose();
           game = new GameClass(
             canvas,
@@ -304,16 +343,31 @@ async function joinRoom(create: boolean, local = false) {
             true,
           );
           startButton.disabled = true;
+          el<HTMLButtonElement>('quick-play').disabled = true;
           const roomGame = game;
           void roomGame
             .ready()
             .then(() => {
-              if (game === roomGame) startButton.disabled = false;
+              if (game === roomGame) {
+                startButton.disabled = false;
+                el<HTMLButtonElement>('quick-play').disabled = false;
+                el<HTMLButtonElement>('local-bots').disabled = false;
+                el('local-bots').textContent = 'NOVA PARTIDA · BOTS';
+                el('quick-play').textContent = 'ENTRAR NA PARTIDA';
+                startHelp.textContent =
+                  'Partida pronta. Clique em ENTRAR NA PARTIDA para capturar o mouse.';
+              }
             })
             .catch(() => {
-              el('room-message').textContent =
-                'Não foi possível preparar a arena 3D. Volte ao treino e tente novamente.';
+              if (game !== roomGame) return;
+              disconnectRoom();
+              announceError(
+                'Não foi possível preparar a arena 3D. Tente novamente ou use qualidade baixa.',
+              );
             });
+          const restartButton = pause.querySelector<HTMLButtonElement>('[data-action="restart"]')!;
+          restartButton.hidden = !local;
+          restartButton.textContent = 'REINICIAR PARTIDA';
           roomReady = true;
           currentRoom = state.room;
           startLabel.textContent = 'ENTRAR NA ARENA';
@@ -323,6 +377,36 @@ async function joinRoom(create: boolean, local = false) {
         }
         connecting = false;
         latestRoom = state;
+        if (state.rounds.phase === 'match-over' && el('result-overlay').hidden) {
+          el('result-overlay').hidden = false;
+          game?.pause();
+          inSession = false;
+          hud.hidden = true;
+          pause.hidden = true;
+          menu.hidden = true;
+          el('result-overlay').hidden = false;
+          el('result-title').textContent =
+            state.rounds.mode === 'defuse'
+              ? `EQUIPE ${state.rounds.winner === 'alpha' ? 'ALPHA' : 'BRAVO'} VENCEU`
+              : 'PARTIDA ENCERRADA';
+          el('result-description').textContent = state.rounds.reason;
+          el('result-score').textContent = state.actors
+            .map(
+              (a) =>
+                `${a.id === state.self ? 'VOCÊ' : a.bot ? 'BOT' : 'JOGADOR'}: ${a.kills} eliminações / ${a.deaths} mortes`,
+            )
+            .join(' · ');
+          el('rematch').hidden = !local;
+          account.save({
+            last_match: {
+              mode: state.rounds.mode,
+              scores: state.rounds.scores,
+              kills: state.actors.find((a) => a.id === state.self)?.kills || 0,
+              savedAt: new Date().toISOString(),
+            },
+          });
+          el('result-home').focus();
+        }
         hud.dataset.room = state.room;
         hud.dataset.actors = String(state.actors.length);
         game?.applyMatch(state);
@@ -332,33 +416,43 @@ async function joinRoom(create: boolean, local = false) {
           : `SALA ${state.room} · ${state.actors.filter((a) => !a.bot).length} jogadores · ${state.actors.filter((a) => a.bot).length} bots. Compartilhe o código.`;
         el('training-tip').textContent =
           own?.health === 0
-            ? 'ELIMINADO — REAPARECIMENTO EM 3 SEGUNDOS'
-            : `SALA ${currentRoom} · ${own?.kills || 0} eliminações / ${own?.deaths || 0} mortes · laranja: bots, azul: jogadores`;
+            ? state.rounds.mode === 'defuse'
+              ? 'ELIMINADO · AGUARDE A PRÓXIMA RODADA'
+              : 'ELIMINADO · REAPARECIMENTO EM 3 SEGUNDOS'
+            : `SALA ${currentRoom} · ${own?.kills || 0} eliminações / ${own?.deaths || 0} mortes · B compra · 1/2 armas · 3 faca · 4 granada`;
         document.querySelector('.hud-top-left strong')!.textContent = `ARENA / ${state.room}`;
-        document.querySelector('.hud-top-left .label')!.textContent = 'COMBATE LIVRE';
+        document.querySelector('.hud-top-left .label')!.textContent =
+          state.rounds.mode === 'defuse'
+            ? `BOMBA · EQUIPE ${own?.team === 'alpha' ? 'ALPHA' : 'BRAVO'}`
+            : 'COMBATE LIVRE';
         if (own?.health === 0) el('training-tip').hidden = false;
       },
       closed: (message: string) => {
-        connecting = false;
-        game?.pause();
-        inSession = false;
-        hud.hidden = true;
-        pause.hidden = true;
-        menu.hidden = false;
+        disconnectRoom();
+        announceError(message);
         el('room-message').textContent = message;
-        startButton.disabled = true;
       },
     };
-    roomConnection = local ? localPractice(options.bots, options.state) : connectRoom(options);
+    roomConnection = local
+      ? localPractice(options.bots, options.state, options.mode)
+      : connectRoom(options);
   } catch (error) {
     connecting = false;
+    startButton.disabled = !game;
+    el<HTMLButtonElement>('quick-play').disabled = false;
+    el<HTMLButtonElement>('local-bots').disabled = false;
+    el('quick-play').textContent = 'JOGAR AGORA · BOTS';
     el('room-message').textContent = error instanceof Error ? error.message : 'Falha ao conectar.';
   }
 }
-el('local-bots').addEventListener('click', () => void joinRoom(true, true));
+el('local-bots').addEventListener('click', () => {
+  if (roomReady) disconnectRoom(false);
+  void joinRoom(true, true);
+});
 el('create-room').addEventListener('click', () => void joinRoom(true));
 el('join-room').addEventListener('click', () => void joinRoom(false));
-el('disconnect-room').addEventListener('click', () => {
+function disconnectRoom(reboot = true) {
+  gameGeneration++;
   roomConnection?.close();
   roomConnection = undefined;
   roomReady = false;
@@ -375,22 +469,42 @@ el('disconnect-room').addEventListener('click', () => {
   delete hud.dataset.actors;
   el('health-count').textContent = '100';
   el('room-message').textContent = 'Desconectado.';
-  void boot();
+  el('result-overlay').hidden = true;
+  el('quick-play').textContent = 'JOGAR AGORA · BOTS';
+  el('local-bots').textContent = 'JOGAR COM BOTS NESTE COMPUTADOR';
+  el<HTMLButtonElement>('local-bots').disabled = false;
+  el<HTMLButtonElement>('quick-play').disabled = false;
+  if (reboot) void boot();
+}
+el('disconnect-room').addEventListener('click', () => disconnectRoom());
+el('rematch').addEventListener('click', () => {
+  disconnectRoom(false);
+  void joinRoom(true, true);
 });
+el('result-home').addEventListener('click', () => disconnectRoom());
 
 async function boot(): Promise<void> {
+  const generation = ++gameGeneration;
+  const restartButton = pause.querySelector<HTMLButtonElement>('[data-action="restart"]')!;
+  restartButton.hidden = false;
+  restartButton.textContent = 'REINICIAR TREINO';
   document.querySelector('.hud-top-left strong')!.textContent = 'COMPLEXO FERRO';
   document.querySelector('.hud-top-left .label')!.textContent = 'TREINO LIVRE';
   el('training-tip').textContent =
     'Explore o complexo e acerte os alvos laranja. Eles retornam após 4 segundos.';
   try {
     const { Game: GameClass } = await import('./game/game');
-    game = new GameClass(canvas, settings, { onLockChange, onSnapshot: updateHud });
-    await game.ready();
+    if (generation !== gameGeneration) return;
+    const trainingGame = new GameClass(canvas, settings, { onLockChange, onSnapshot: updateHud });
+    game = trainingGame;
+    await trainingGame.ready();
+    if (game !== trainingGame || generation !== gameGeneration) return;
     startLabel.textContent = 'INICIAR TREINO';
     startHelp.textContent = 'Teclado + mouse · Clique para capturar o ponteiro';
     startButton.disabled = false;
+    el<HTMLButtonElement>('quick-play').disabled = false;
   } catch (error) {
+    if (generation !== gameGeneration) return;
     startLabel.textContent = 'CAMPO INDISPONÍVEL';
     startHelp.textContent = 'Não foi possível iniciar o motor 3D.';
     announceError(

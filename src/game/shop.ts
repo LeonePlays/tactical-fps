@@ -1,3 +1,4 @@
+import type { EquipmentInventory } from './equipment';
 import { WEAPONS } from './ballistics';
 import type { WeaponController } from './weapons';
 export const SHOP = {
@@ -6,6 +7,7 @@ export const SHOP = {
   primaryAmmo: { label: 'Munição primária (30)', price: 60 },
   secondaryAmmo: { label: 'Munição secundária (12)', price: 25 },
   armor: { label: 'Colete', price: 650 },
+  grenade: { label: 'Granada HE', price: 300 },
 } as const;
 export type BuyItem = keyof typeof SHOP;
 export interface Wallet {
@@ -17,11 +19,14 @@ export function buy(
   wallet: Wallet,
   item: BuyItem,
   allowed: boolean,
+  equipment?: EquipmentInventory,
 ): string {
   if (!allowed) return 'Compra disponível na área inicial durante 90 segundos.';
   const price = SHOP[item].price;
   if (wallet.money < price) return 'Dinheiro insuficiente.';
-  if (item === 'armor') {
+  if (item === 'grenade') {
+    if (!equipment || !equipment.addGrenade()) return 'Você já carrega uma granada.';
+  } else if (item === 'armor') {
     if (wallet.armor === 100) return 'Você já tem colete completo.';
     wallet.armor = 100;
   } else if (item === 'primary' || item === 'secondary') {

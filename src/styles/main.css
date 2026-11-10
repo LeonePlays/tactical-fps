@@ -1150,3 +1150,48 @@ em {
   color: #a9b6a5;
   font-weight: normal;
 }
+
+.hero h1 {
+  font-size: 64px;
+  line-height: 1.02;
+}
+.training-button {
+  margin-top: 10px;
+  min-height: 38px;
+  padding: 10px 18px;
+  font-size: 11px;
+}
+.local-lobby {
+  top: 180px;
+  width: 330px;
+}
+.local-lobby > label {
+  display: flex;
+  justify-content: space-between;
+}
+.local-lobby select {
+  max-width: 245px;
+}
+#quick-play {
+  display: flex;
+}
+#result-overlay {
+  z-index: 60;
+  background: #111b16e8;
+}
+#result-score {
+  line-height: 1.8;
+  color: #c8d6af;
+}
+#objective-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 65vw;
+  text-align: center;
+  background: #111b13b8;
+  padding: 9px 14px;
+  font: 12px monospace;
+  color: #e6d89c;
+}

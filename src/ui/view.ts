@@ -26,7 +26,7 @@ export function renderView(root: HTMLElement): void {
       <div class="menu-content">
         <header class="topbar">
           <a href="#" class="wordmark" data-action="home">TACTICAL<span>FPS</span><small>INDEPENDENT TACTICAL EXPERIENCE</small></a>
-          <div class="topbar-right"><span class="status-dot"></span> SESSÃO LOCAL <span class="version">CLASSIC 0.2</span></div>
+          <div class="topbar-right"><span class="status-dot"></span> SESSÃO LOCAL <span class="version">BETA 0.3</span></div>
         </header>
         <nav class="tabs" aria-label="Menu">
           <button class="active" data-action="play-tab">JOGAR <span>01</span></button>
@@ -34,12 +34,12 @@ export function renderView(root: HTMLElement): void {
           <button data-action="controls">CONTROLES</button>
         </nav>
         <main class="hero">
-          <div class="eyebrow"><span class="tiny-line"></span> PRIMEIRA OPERAÇÃO <span class="tag">TREINO LIVRE</span></div>
-          <h1>CADA MOVIMENTO<br>FAZ A <em>DIFERENÇA.</em></h1>
-          <p class="hero-description">Entre no complexo. Conheça o terreno.<br>Domine o próximo movimento.</p>
+          <div class="eyebrow"><span class="tiny-line"></span> BETA JOGÁVEL <span class="tag">SEM CADASTRO PARA TREINO E BOTS</span></div>
+          <h1>TACTICAL<br><em>FPS.</em></h1>
+          <p class="hero-description">Entre como visitante. Enfrente os bots.<br>Jogue uma partida completa no navegador.</p>
           <div class="operation-info"><span class="operation-number">04</span><div><span class="label">ÁREA DE OPERAÇÃO</span><strong>COMPLEXO FERRO</strong><span class="subtle">Zona industrial · Campo de treino</span></div></div>
           <div class="mode-line"><span class="status-dot"></span><span>EXPLORAÇÃO + PRÁTICA DE MIRA</span><span class="mode-divider">/</span><span>1 JOGADOR</span></div>
-          <button id="start-button" class="button primary start-button" data-action="start" disabled><span id="start-label">PREPARANDO CAMPO</span>${arrow}</button>
+          <button id="quick-play" class="button primary start-button" data-action="quick-play">JOGAR AGORA · BOTS</button><button id="start-button" class="button secondary training-button" data-action="start" disabled><span id="start-label">PREPARANDO CAMPO</span>${arrow}</button>
           <p id="start-help" class="start-help" role="status">Carregando o motor 3D…</p>
         </main>
         <section class="map-card" aria-label="Informações do campo de treino">
@@ -52,19 +52,20 @@ export function renderView(root: HTMLElement): void {
     </div>
     <div id="hud" hidden aria-label="Dados da sessão">
       <canvas id="radar" width="144" height="144" aria-label="Radar local: terreno e contatos visíveis próximos"></canvas>
-      <div class="hud-top-left"><span class="label">TREINO LIVRE</span><strong>COMPLEXO FERRO</strong><span class="hud-session">TEMPO DE SESSÃO <span id="session-time">00:00</span></span></div>
+      <div class="hud-top-left"><span class="label">TREINO LIVRE</span><strong>COMPLEXO FERRO</strong><span class="hud-session">TEMPO <span id="session-time">00:00</span></span></div>
       <div class="compass"><b id="bearing">000°</b></div>
       <div class="hud-score"><span class="label">ALVOS ATINGIDOS</span><strong id="hit-count">00</strong><small>PRECISÃO <span id="accuracy">—</span></small></div>
-      <div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div id="objective-banner" hidden></div><div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <div id="hit-marker" hidden aria-hidden="true">×</div>
       <div id="training-tip" class="training-tip">WASD correr · SHIFT andar · B comprar · R recarregar</div>
       <div class="hud-bottom-left"><div class="health-icon">+</div><strong><span id="health-count">100</span><small>VIDA</small></strong><span class="armor-icon">◇</span><strong><span id="armor-count">0</span><small>COLETE</small></strong><div class="stance-indicator"><b id="stance-label">EM PÉ</b><span id="movement-label">PRONTO</span></div></div>
       <div id="money-count" aria-label="Dinheiro">$16000</div>
-      <div class="hud-bottom-center"><span>B <b>COMPRAR</b></span><span>1 / 2 <b>ARMAS</b></span><span>ESC <b>PAUSAR</b></span></div>
+      <div class="hud-bottom-center"><span>B <b>COMPRAR</b></span><span>1 / 2 <b>ARMAS</b></span><span>3 / 4 <b>FACA / HE</b></span><span>ESC <b>PAUSAR</b></span></div>
       <div class="hud-ammo"><span class="label">CARABINA T-04</span><div><strong id="ammo-count">30</strong><span>/ <b id="reserve-count">90</b></span></div><small id="reload-label">R · RECARREGAR</small></div>
       <div class="hud-coordinates"><span id="coordinates">X 0 / Z -22</span><span id="fps-counter" hidden></span></div>
-      <aside id="buy-panel" hidden role="dialog" aria-modal="true" aria-labelledby="buy-title"><h2 id="buy-title">COMPRAR EQUIPAMENTO</h2><p>Use as teclas 1–5 · B para fechar</p><ol><li>Carabina T-04 <b>$2700</b></li><li>Pistola P-09 <b>$500</b></li><li>Munição primária (30) <b>$60</b></li><li>Munição secundária (12) <b>$25</b></li><li>Colete <b>$650</b></li></ol><p id="buy-zone"></p><p id="buy-message" role="status"></p></aside>
+      <aside id="buy-panel" hidden role="dialog" aria-modal="true" aria-labelledby="buy-title"><h2 id="buy-title">COMPRAR EQUIPAMENTO</h2><p>Use as teclas 1–6 · B para fechar</p><ol><li>Carabina T-04 <b>$2700</b></li><li>Pistola P-09 <b>$500</b></li><li>Munição primária (30) <b>$60</b></li><li>Munição secundária (12) <b>$25</b></li><li>Colete <b>$650</b></li><li>Granada HE <b>$300</b></li></ol><p id="buy-zone"></p><p id="buy-message" role="status"></p></aside>
     </div>
+    <div id="result-overlay" class="overlay" hidden><section class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="result-title"><span class="eyebrow">TACTICAL FPS / RESULTADO</span><h2 id="result-title">PARTIDA ENCERRADA</h2><p id="result-description"></p><p id="result-score"></p><button id="rematch" class="button primary">JOGAR NOVAMENTE</button><button id="result-home" class="button secondary">VOLTAR AO MENU</button></section></div>
     <div id="pause-overlay" class="overlay" hidden>
       <section class="pause-panel" role="dialog" aria-modal="true" aria-labelledby="pause-title">
         <span class="eyebrow">TACTICAL FPS / TREINO LIVRE</span><h2 id="pause-title">RESPIRE.<br><em>REORGANIZE.</em></h2><p>A sessão está pausada.</p>
@@ -102,7 +103,7 @@ export function renderView(root: HTMLElement): void {
           <div><span class="key-group"><kbd>Z</kbd></span><b>DEITAR / LEVANTAR</b></div>
           <div><span class="key-group"><kbd>ESPAÇO</kbd></span><b>SALTAR</b></div>
           <div><span class="key-group"><kbd>CLIQUE ESQUERDO</kbd></span><b>DISPARAR</b></div>
-          <div><span class="key-group"><kbd>R</kbd></span><b>RECARREGAR</b></div><div><span class="key-group"><kbd>B</kbd></span><b>COMPRAR (TECLAS 1–5)</b></div>
+          <div><span class="key-group"><kbd>R</kbd></span><b>RECARREGAR</b></div><div><span class="key-group"><kbd>1</kbd> / <kbd>2</kbd></span><b>PRIMÁRIA / SECUNDÁRIA</b></div><div><span class="key-group"><kbd>3</kbd> / <kbd>4</kbd></span><b>FACA / GRANADA</b></div><div><span class="key-group"><kbd>E</kbd></span><b>PLANTAR / DESARMAR BOMBA</b></div><div><span class="key-group"><kbd>B</kbd></span><b>COMPRAR (TECLAS 1–6)</b></div>
           <div><span class="key-group"><kbd>ESC</kbd></span><b>LIBERAR MOUSE / PAUSAR</b></div>
         </div>
         <p class="control-note">Clique em iniciar para capturar o mouse. Use <kbd>ESC</kbd> para liberá-lo. Agachar e deitar são alternáveis; o teto precisa estar livre para levantar. Não é possível saltar deitado.</p>

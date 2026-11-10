@@ -1,9 +1,12 @@
+import type { RoundSnapshot, Team } from '../game/rounds';
 import type { WeaponState } from '../game/weapons';
 import { SHOP, type BuyItem } from '../game/shop';
 import type { MovementInput, Vec3 } from '../game/physics';
 import type { WeaponSlot } from '../game/ballistics';
-export const PROTOCOL_VERSION = 2 as const;
+export const PROTOCOL_VERSION = 3 as const;
 export interface MatchInput extends MovementInput {
+  tool: 'firearm' | 'knife' | 'grenade';
+  interact: boolean;
   yaw: number;
   pitch: number;
   fire: boolean;
@@ -15,6 +18,8 @@ export interface MatchInput extends MovementInput {
   weapon: WeaponSlot;
 }
 export interface ActorState {
+  team: Team;
+  grenades: number;
   id: string;
   bot: boolean;
   position: Vec3;
@@ -42,8 +47,12 @@ export interface MatchState {
   room: string;
   self: string;
   actors: ActorState[];
+  rounds: RoundSnapshot;
+  grenades: { id: string; owner: string; position: Vec3; remaining: number }[];
 }
 export const IDLE_INPUT: MatchInput = {
+  tool: 'firearm',
+  interact: false,
   forward: 0,
   right: 0,
   sprint: false,
@@ -87,7 +96,12 @@ export function parseInput(value: unknown): MatchInput | null {
     (typeof x.buyItem !== 'string' || !Object.hasOwn(SHOP, x.buyItem))
   )
     return null;
+  if (x.tool !== undefined && !['firearm', 'knife', 'grenade'].includes(String(x.tool)))
+    return null;
+  if (x.interact !== undefined && typeof x.interact !== 'boolean') return null;
   return {
+    tool: (x.tool as MatchInput['tool'] | undefined) ?? 'firearm',
+    interact: x.interact === true,
     reloadSequence: (x.reloadSequence as number | undefined) ?? 0,
     fireSequence: (x.fireSequence as number | undefined) ?? 0,
     buySequence: (x.buySequence as number | undefined) ?? 0,

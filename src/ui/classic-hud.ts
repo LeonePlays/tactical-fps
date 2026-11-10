@@ -1,5 +1,6 @@
 import type { GameSnapshot } from '../game/game';
 import { WEAPONS } from '../game/ballistics';
+import { EQUIPMENT } from '../game/equipment';
 import { rayBox } from '../network/arena';
 export class ClassicHud {
   private nodes = new Map<string, HTMLElement>();
@@ -24,8 +25,16 @@ export class ClassicHud {
     if (node.textContent !== value) node.textContent = value;
   }
   update(state: GameSnapshot, showFps: boolean, kills?: number, dynamicCrosshair = true) {
-    this.text('ammo-count', String(state.ammo).padStart(2, '0'));
-    this.text('reserve-count', String(state.reserve));
+    const firearm = state.tool === 'firearm';
+    this.text(
+      'ammo-count',
+      firearm
+        ? String(state.ammo).padStart(2, '0')
+        : state.tool === 'knife'
+          ? '—'
+          : String(state.grenades),
+    );
+    this.text('reserve-count', firearm ? String(state.reserve) : '—');
     this.text('health-count', String(Math.ceil(state.health)));
     this.text('armor-count', String(Math.ceil(state.armor)));
     this.text('money-count', `$${state.money}`);
@@ -55,7 +64,17 @@ export class ClassicHud {
     );
     this.text(
       'reload-label',
-      state.reloading ? 'RECARREGANDO…' : state.deploying ? 'EQUIPANDO…' : 'R · RECARREGAR',
+      !firearm
+        ? state.tool === 'knife'
+          ? 'CLIQUE · GOLPE'
+          : state.grenades
+            ? 'CLIQUE · LANÇAR'
+            : 'SEM GRANADA · B / 6 COMPRAR'
+        : state.reloading
+          ? 'RECARREGANDO…'
+          : state.deploying
+            ? 'EQUIPANDO…'
+            : 'R · RECARREGAR',
     );
     this.text(
       'bearing',
@@ -67,7 +86,9 @@ export class ClassicHud {
     this.text('fps-counter', `${state.fps} FPS`);
     this.node('fps-counter').hidden = !showFps;
     this.node('hit-marker').hidden = !state.hit;
-    this.ammoLabel.textContent = WEAPONS[state.weapon].name;
+    this.ammoLabel.textContent = firearm
+      ? WEAPONS[state.weapon].name
+      : EQUIPMENT[state.tool === 'knife' ? 'knife' : 'grenade'].name;
     this.scoreLabel.textContent = kills === undefined ? 'ALVOS' : 'ELIMINAÇÕES';
     this.node('buy-panel').hidden = !state.buying;
     this.text(
@@ -86,6 +107,8 @@ export class ClassicHud {
         );
     this.crosshair.style.setProperty('--gap', `${gap.toFixed(1)}px`);
     Object.assign(this.root.dataset, {
+      tool: state.tool,
+      grenades: String(state.grenades),
       elapsed: String(state.elapsed),
       position: JSON.stringify(state.position),
       stance: state.stance,
