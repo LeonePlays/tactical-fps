@@ -53,7 +53,7 @@ test('a new visitor can move, use all equipment, return and retain browser setti
     .toBeGreaterThan(started + 0.4);
   await page.keyboard.up('w');
   expect((await position(page)).z).toBeGreaterThan(before.z + 0.5);
-  await page.keyboard.press('Control');
+  await page.keyboard.press('c');
   await expect(page.locator('#stance-label')).toHaveText('AGACHADO');
   await page.keyboard.press('z');
   await expect(page.locator('#stance-label')).toHaveText('DEITADO');
@@ -64,7 +64,7 @@ test('a new visitor can move, use all equipment, return and retain browser setti
     ['2', 'PISTOLA P-09'],
     ['1', 'CARABINA T-04'],
     ['3', 'FACA DE COMBATE'],
-    ['4', 'GRANADA HE'],
+    ['4', 'GRANADA HE · SLOT 1'],
   ]) {
     await page.keyboard.press(key!);
     await expect(page.locator('.hud-ammo .label')).toHaveText(label!);

@@ -9,6 +9,20 @@ describe('authoritative arena', () => {
     expect(parseInput({ ...IDLE_INPUT, yaw: Infinity })).toBeNull();
     expect(parseInput({ ...IDLE_INPUT, fire: 'yes' })).toBeNull();
     expect(parseInput({ ...IDLE_INPUT, forward: 100 })?.forward).toBe(1);
+    expect(parseInput({ ...IDLE_INPUT, walk: 'yes' })).toBeNull();
+    expect(parseInput({ ...IDLE_INPUT, aiming: 1 })).toBeNull();
+    expect(parseInput({ ...IDLE_INPUT, grenadeSlot: 2 })).toBeNull();
+    expect(parseInput({ ...IDLE_INPUT, dropSequence: -1 })).toBeNull();
+    expect(
+      parseInput({
+        ...IDLE_INPUT,
+        tool: 'bomb',
+        grenadeSlot: 1,
+        dropSequence: 4,
+        walk: true,
+        aiming: true,
+      }),
+    ).toMatchObject({ tool: 'bomb', grenadeSlot: 1, dropSequence: 4, walk: true, aiming: true });
   });
   it('stops abandoned inputs and confines players to arena collisions', () => {
     const m = new Match();

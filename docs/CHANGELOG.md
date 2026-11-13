@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 — Controles, inventário e ferramentas de sala
+
+- C agacha, Z deita, Ctrl corre e Shift anda silenciosamente, com prioridade sobre a corrida.
+- Botão direito mantém mira com aproximação suave, arma centralizada e redução da velocidade; F alterna lanterna real.
+- Scroll percorre apenas equipamentos disponíveis. Slots 4/5 guardam HE independentes; 6 seleciona a bomba de quem a carrega.
+- Q larga arma, HE ou bomba; E recolhe com distância/oclusão, preservando munição e evitando duplicação. Faca é o equipamento permanente.
+- T/Y enviam chat real por sala/equipe; H configura mapa, modo, bots, dificuldade e limites pelo anfitrião online.
+- Protocolo 5: atualizar frontend e servidor juntos. Objetivos não podem ser manipulados através de paredes.
+
 ## 0.4.0 — Mapas, equipes e polimento offline
 
 - Segundo mapa real: Bairro Antigo, com praça, ruas, café/mercado e rotas interiores; seleção compartilhada entre renderer, física, navegação e servidor.

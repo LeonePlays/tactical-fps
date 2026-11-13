@@ -52,14 +52,28 @@ describe('desktop FPS kinematic movement', () => {
     const backwards = player();
     const crouch = player();
     const prone = player();
-    advance(sprint, { forward: 1, sprint: true });
-    advance(backwards, { forward: -1, sprint: true });
+    advance(sprint, { forward: 1, walk: true });
+    advance(backwards, { forward: -1, walk: true });
     advance(crouch, { forward: 1, sprint: true, stance: 'crouching' });
     advance(prone, { forward: 1, sprint: true, stance: 'prone' });
     expect(sprint.speed).toBeCloseTo(SPEED.walk);
     expect(backwards.velocityZ).toBeCloseTo(-SPEED.walk);
     expect(crouch.speed).toBeCloseTo(SPEED.crouching);
     expect(prone.speed).toBeCloseTo(SPEED.prone);
+  });
+  it('runs faster with Ctrl while Shift and aiming take priority', () => {
+    const run = player(),
+      silent = player(),
+      aim = player();
+    advance(run, { forward: 1, sprint: true });
+    advance(silent, { forward: 1, sprint: true, walk: true });
+    advance(aim, { forward: 1, sprint: true, aiming: true });
+    expect(run.speed).toBeCloseTo(SPEED.sprint);
+    expect(run.sprinting).toBe(true);
+    expect(silent.speed).toBeCloseTo(SPEED.walk);
+    expect(aim.speed).toBeCloseTo(SPEED.walk);
+    expect(silent.sprinting).toBe(false);
+    expect(aim.sprinting).toBe(false);
   });
   it('jumps, lands, and requires release before jumping again', () => {
     const body = player();

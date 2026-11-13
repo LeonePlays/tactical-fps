@@ -9,7 +9,9 @@
 - Simulação offline única a 60 Hz, posturas, degraus baixos, física e tiro compartilhados com o servidor.
 - Operadores facetados articulados e carabina/pistola/faca/HE com animações e feedback original.
 - Perfil local, configuração persistida, TAB, notificações reais, áudio separado, resolução, sombras e tela cheia.
-- Servidor Node/WebSocket com protocolo 4, lista `/rooms` real, entradas validadas e reinício pelo anfitrião.
+- Controles: C agacha, Z deita, Ctrl corre, Shift anda silenciosamente, botão direito mira e F controla lanterna.
+- Seleção de equipamento por 1–6 e scroll; dois slots de HE; Q larga e E recupera equipamento com munição preservada.
+- Servidor Node/WebSocket com protocolo 5, lista `/rooms` real, entradas validadas, chat global/equipe T/Y e reinício/reconfiguração pelo anfitrião em H.
 
 ## Dependências externas
 
@@ -19,6 +21,6 @@ O servidor multiplayer está preparado para execução local e publicação post
 
 ## Planejamento posterior
 
-Campanha narrativa e missões, mapa de porto, matchmaking público, ranking com resultados validados pelo servidor, chat/voz, compensação avançada de latência e reconexão com placar. Validar carga e autenticação real antes de hospedar competição pública. Ampliar animações, áudio e detalhes de arte conforme testes dos jogadores, sem copiar assets proprietários de jogos de referência.
+Campanha narrativa e missões, mapa de porto, matchmaking público, ranking com resultados validados pelo servidor, chat de voz, compensação avançada de latência e reconexão com placar. Validar carga e autenticação real antes de hospedar competição pública. Ampliar animações, áudio e detalhes de arte conforme testes dos jogadores, sem copiar assets proprietários de jogos de referência.
 
 Preservar GDD 1.4. Metadados editáveis de usuário não devem servir como ranking competitivo. Não há promessa de ausência absoluta de bugs ou medição de 60 FPS em hardware não testado. O relatório final deve distinguir testes executados, pendentes e limitações externas.

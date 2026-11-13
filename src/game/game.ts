@@ -1,5 +1,7 @@
 import { createActor, type ActorModel } from './actors';
-import type { MatchInput, MatchState } from '../network/protocol';
+import type { MatchInput, MatchState, DroppedItemState } from '../network/protocol';
+import { createBombView } from './bomb-view';
+import { SpotLight } from '@babylonjs/core/Lights/spotLight';
 import { seedFor, shotDirection, spreadFor, type WeaponSlot } from './ballistics';
 import {
   EquipmentInventory,
@@ -52,6 +54,10 @@ import { createWeapon, animateWeapon } from './weapon';
 import type { Settings } from '../core/settings';
 
 export interface GameSnapshot {
+  aiming: boolean;
+  flashlight: boolean;
+  equipmentSlot: number;
+  equippedOwned: boolean;
   renderScale: number;
   shadows: boolean;
   map: MapId;
@@ -99,6 +105,15 @@ export class Game {
   private readonly scene: Scene;
   private readonly camera: UniversalCamera;
   private readonly menuCamera: UniversalCamera;
+  private readonly flashlight: SpotLight;
+  private flashlightOn = false;
+  private aimHeld = false;
+  private aimBlend = 0;
+  private grenadeSlot: 0 | 1 = 0;
+  private hasBomb = false;
+  private dropSequence = 0;
+  private readonly droppedMeshes = new Map<string, TransformNode>();
+  private trainingDrops: DroppedItemState[] = [];
   private readonly world: World;
   private weapon: TransformNode;
   private weaponMeshes: AbstractMesh[] = [];
@@ -191,6 +206,19 @@ export class Game {
     this.camera.minZ = 0.04;
     this.camera.maxZ = 180;
     this.camera.fovMode = Camera.FOVMODE_HORIZONTAL_FIXED;
+    this.flashlight = new SpotLight(
+      'player-flashlight',
+      Vector3.Zero(),
+      new Vector3(0, 0, 1),
+      Math.PI / 4,
+      12,
+      this.scene,
+    );
+    this.flashlight.parent = this.camera;
+    this.flashlight.diffuse = new Color3(1, 0.97, 0.86);
+    this.flashlight.intensity = 3;
+    this.flashlight.range = 24;
+    this.flashlight.setEnabled(false);
     this.menuCamera = new UniversalCamera('menu-camera', new Vector3(29, 18, -32), this.scene);
     this.menuCamera.inputs.clear();
     this.menuCamera.minZ = 0.1;
@@ -219,6 +247,7 @@ export class Game {
         this.active = document.pointerLockElement === this.canvas;
         this.keys.clear();
         this.trigger = false;
+        this.aimHeld = false;
         this.buying = false;
         this.clock.reset();
         this.events.onScoreboard?.(false);
@@ -270,7 +299,17 @@ export class Game {
             'ControlLeft',
             'ControlRight',
             'KeyZ',
+            'KeyC',
             'KeyR',
+            'KeyE',
+            'KeyF',
+            'KeyQ',
+            'Digit1',
+            'Digit2',
+            'Digit3',
+            'Digit4',
+            'Digit5',
+            'Digit6',
             'Tab',
           ].includes(event.code)
         )
@@ -296,7 +335,7 @@ export class Game {
         }
         this.keys.add(event.code);
         if (event.repeat) return;
-        if (event.code === 'ControlLeft' || event.code === 'ControlRight')
+        if (event.code === 'KeyC')
           this.requestedStance = this.requestedStance === 'crouching' ? 'standing' : 'crouching';
         if (event.code === 'KeyZ')
           this.requestedStance = this.requestedStance === 'prone' ? 'standing' : 'prone';
@@ -307,7 +346,12 @@ export class Game {
         if (event.code === 'Digit1') this.switchWeapon('primary');
         if (event.code === 'Digit2') this.switchWeapon('secondary');
         if (event.code === 'Digit3') this.switchTool('knife');
-        if (event.code === 'Digit4') this.switchTool('grenade');
+        if (event.code === 'Digit4') this.selectEquipment(4);
+        if (event.code === 'Digit5') this.selectEquipment(5);
+        if (event.code === 'Digit6') this.selectEquipment(6);
+        if (event.code === 'KeyF') this.flashlightOn = !this.flashlightOn;
+        if (event.code === 'KeyQ') this.dropEquipment();
+        if (event.code === 'KeyE' && !this.online) this.pickupTrainingItem();
       },
       options,
     );
@@ -323,6 +367,10 @@ export class Game {
       'mousedown',
       (event) => {
         if (!this.active) return;
+        if (event.button === 2 && !this.buying && this.tool === 'firearm') {
+          this.aimHeld = true;
+          return;
+        }
         if (event.button === 0) {
           if (this.buying) return;
           this.trigger = true;
@@ -334,12 +382,26 @@ export class Game {
     );
     window.addEventListener(
       'mouseup',
-      () => {
-        this.trigger = false;
+      (event) => {
+        if (event.button === 0) this.trigger = false;
+        if (event.button === 2) this.aimHeld = false;
       },
       options,
     );
     this.canvas.addEventListener('contextmenu', (event) => event.preventDefault(), options);
+    this.canvas.addEventListener(
+      'wheel',
+      (event) => {
+        if (!this.active || this.buying || !event.deltaY) return;
+        event.preventDefault();
+        const slots = this.availableEquipment();
+        const index = slots.indexOf(this.equipmentSlot);
+        this.selectEquipment(
+          slots[(index + (event.deltaY > 0 ? 1 : -1) + slots.length) % slots.length],
+        );
+      },
+      { ...options, passive: false },
+    );
     window.addEventListener('blur', () => this.pause(), options);
     document.addEventListener(
       'visibilitychange',
@@ -394,6 +456,7 @@ export class Game {
     this.events.onScoreboard?.(false);
     this.keys.clear();
     this.trigger = false;
+    this.aimHeld = false;
     this.buying = false;
     if (document.pointerLockElement === this.canvas) document.exitPointerLock();
   }
@@ -409,6 +472,8 @@ export class Game {
     this.cameraCorrection.setAll(0);
     this.gun = new WeaponController();
     this.equipment.reset(this.fireSequence);
+    this.trainingDrops = [];
+    this.syncDroppedItems([]);
     this.tool = 'firearm';
     this.toolReady = 0;
     this.targetHealth.clear();
@@ -464,6 +529,7 @@ export class Game {
   }
 
   private useEquipment(): void {
+    if (this.tool === 'bomb') return;
     const origin = {
       x: this.body.position.x,
       y: this.body.position.y + this.body.eyeHeight,
@@ -485,6 +551,7 @@ export class Game {
         origin,
         direction,
         this.world.solids,
+        this.grenadeSlot,
       );
       if (!grenade) return;
       this.recoil = 1;
@@ -651,12 +718,154 @@ export class Game {
     this.muzzleFlash = this.weaponMeshes.find((mesh) => mesh.name === 'muzzle-flash');
   }
 
+  private get aiming(): boolean {
+    return (
+      this.active &&
+      this.aimHeld &&
+      this.tool === 'firearm' &&
+      !this.buying &&
+      this.matchHealth > 0 &&
+      !this.gun.reloading
+    );
+  }
+
+  private get equipmentSlot(): number {
+    return this.tool === 'firearm'
+      ? this.slot === 'primary'
+        ? 1
+        : 2
+      : this.tool === 'knife'
+        ? 3
+        : this.tool === 'grenade'
+          ? 4 + this.grenadeSlot
+          : 6;
+  }
+
+  private availableEquipment(): number[] {
+    return [
+      ...(this.gun.inventory.primary.owned ? [1] : []),
+      ...(this.gun.inventory.secondary.owned ? [2] : []),
+      3,
+      ...(this.equipment.grenadeSlots[0] ? [4] : []),
+      ...(this.equipment.grenadeSlots[1] ? [5] : []),
+      ...(this.hasBomb ? [6] : []),
+    ];
+  }
+
+  private selectEquipment(slot: number): void {
+    if (slot === 1 || slot === 2) this.switchWeapon(slot === 1 ? 'primary' : 'secondary');
+    else if (slot === 3) this.switchTool('knife');
+    else if (slot === 4 || slot === 5) {
+      this.grenadeSlot = slot === 4 ? 0 : 1;
+      this.switchTool('grenade');
+      this.emitSnapshot();
+    } else if (slot === 6) {
+      if (this.hasBomb) this.switchTool('bomb');
+      else this.buyMessage = 'Você não está carregando a bomba.';
+    }
+  }
+
+  private dropEquipment(): void {
+    if (this.matchHealth <= 0) return;
+    this.dropSequence++;
+    this.trigger = false;
+    this.aimHeld = false;
+    if (this.online) return; // The authoritative match removes and publishes the item.
+    let item: Omit<DroppedItemState, 'id' | 'position' | 'expiresAt'> | undefined;
+    if (this.tool === 'firearm') {
+      const magazine = this.gun.drop(this.slot, this.elapsed);
+      if (magazine) item = { kind: this.slot, ...magazine };
+    } else if (this.tool === 'grenade' && this.equipment.dropGrenade(this.grenadeSlot))
+      item = { kind: 'grenade' };
+    if (!item) {
+      this.buyMessage = 'Este equipamento não pode ser largado.';
+      return;
+    }
+    this.trainingDrops.push({
+      ...item,
+      id: `training-${this.dropSequence}`,
+      position: { ...this.body.position, y: this.body.position.y + 0.15 },
+      expiresAt: this.elapsed + 180,
+    });
+    if (this.trainingDrops.length > 64) this.trainingDrops.shift();
+    this.switchTool('knife');
+    this.syncDroppedItems(this.trainingDrops);
+  }
+
+  private pickupTrainingItem(): void {
+    const origin = { ...this.body.position, y: this.body.position.y + this.body.eyeHeight };
+    const nearby = this.trainingDrops
+      .map((item) => ({
+        item,
+        distance: Math.hypot(
+          item.position.x - origin.x,
+          item.position.y - origin.y,
+          item.position.z - origin.z,
+        ),
+      }))
+      .filter(({ distance }) => distance < 2.2)
+      .sort((a, b) => a.distance - b.distance);
+    for (const { item, distance } of nearby) {
+      const direction = {
+        x: (item.position.x - origin.x) / distance,
+        y: (item.position.y - origin.y) / distance,
+        z: (item.position.z - origin.z) / distance,
+      };
+      if (this.world.solids.some((solid) => rayBox(origin, direction, solid) < distance - 0.1))
+        continue;
+      const picked =
+        item.kind === 'grenade'
+          ? this.equipment.addGrenade()
+          : this.gun.pickup(
+              item.kind,
+              { ammo: item.ammo ?? 0, reserve: item.reserve ?? 0 },
+              this.elapsed,
+            );
+      if (!picked) continue;
+      this.trainingDrops = this.trainingDrops.filter((entry) => entry.id !== item.id);
+      this.buyMessage = 'Equipamento recolhido.';
+      this.syncDroppedItems(this.trainingDrops);
+      return;
+    }
+  }
+
+  private syncDroppedItems(items: readonly DroppedItemState[]): void {
+    for (const item of items) {
+      if (this.droppedMeshes.has(item.id)) continue;
+      const model =
+        item.kind === 'grenade'
+          ? this.createGrenadeMesh(item.position)
+          : createWeapon(this.scene, this.camera, item.kind === 'secondary');
+      model.parent = null;
+      model.position.set(item.position.x, item.position.y, item.position.z);
+      model.rotation.set(0, 0, Math.PI / 2);
+      if (item.kind !== 'grenade') model.scaling.setAll(0.8);
+      const meshes = [model, ...model.getChildMeshes()];
+      for (const mesh of meshes) {
+        if (!('renderingGroupId' in mesh)) continue;
+        const part = mesh as AbstractMesh;
+        part.renderingGroupId = 0;
+        part.isPickable = false;
+        part.alwaysSelectAsActiveMesh = false;
+        if (part.name === 'muzzle-flash') part.setEnabled(false);
+      }
+      this.droppedMeshes.set(item.id, model);
+    }
+    for (const [id, model] of this.droppedMeshes)
+      if (!items.some((item) => item.id === id)) {
+        model.dispose();
+        this.droppedMeshes.delete(id);
+      }
+  }
+
   private replaceWeapon(): void {
     this.weapon.dispose();
     this.weapon =
       this.tool === 'firearm'
         ? createWeapon(this.scene, this.camera, this.slot === 'secondary')
-        : createEquipmentView(this.scene, this.camera, this.tool);
+        : this.tool === 'bomb'
+          ? createBombView(this.scene, this.camera)
+          : createEquipmentView(this.scene, this.camera, this.tool);
     this.cacheWeaponMeshes();
     this.weapon.setEnabled(this.hasStarted);
   }
@@ -669,6 +878,7 @@ export class Game {
     const changed = this.gun.switch(slot, this.elapsed);
     if (!changed && this.tool === 'firearm') return;
     this.tool = 'firearm';
+    this.aimHeld = false;
     this.audio.play('deploy');
     this.equipment.observe(this.fireSequence);
     this.gun.resetTrigger(this.fireSequence);
@@ -678,9 +888,10 @@ export class Game {
     this.emitSnapshot();
   }
 
-  private switchTool(tool: 'knife' | 'grenade'): void {
+  private switchTool(tool: 'knife' | 'grenade' | 'bomb'): void {
     if (this.tool === tool) return;
     this.tool = tool;
+    this.aimHeld = false;
     this.audio.play('deploy');
     this.trigger = false;
     this.recoil = 0;
@@ -726,7 +937,12 @@ export class Game {
       this.trigger,
       this.fireSequence,
       { yaw: this.yaw, pitch: this.pitch },
-      { speed: this.body.speed, grounded: this.body.grounded, stance: this.body.stance },
+      {
+        speed: this.body.speed,
+        grounded: this.body.grounded,
+        stance: this.body.stance,
+        aiming: this.aiming,
+      },
     );
     if (!shot) return;
     this.shots++;
@@ -770,10 +986,14 @@ export class Game {
     const active = this.active && !this.buying && this.matchHealth > 0 && this.combatAllowed;
     return {
       tool: this.tool,
-      interact: active && this.keys.has('KeyE'),
+      grenadeSlot: this.grenadeSlot,
+      dropSequence: this.dropSequence,
+      aiming: active && this.aiming,
+      interact: this.active && !this.buying && this.matchHealth > 0 && this.keys.has('KeyE'),
       forward: active ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) : 0,
       right: active ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) : 0,
-      sprint: active && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')),
+      sprint: active && (this.keys.has('ControlLeft') || this.keys.has('ControlRight')),
+      walk: active && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')),
       jump: active && this.keys.has('Space'),
       stance: this.requestedStance,
       yaw: this.yaw,
@@ -804,12 +1024,23 @@ export class Game {
       this.events.onTick?.(dt);
     }
     this.stepDistance += Math.hypot(this.body.position.x - beforeX, this.body.position.z - beforeZ);
-    if (this.body.grounded && this.body.sprinting && this.stepDistance > 1.25) {
+    if (
+      this.body.grounded &&
+      this.body.moving &&
+      !this.currentInput().walk &&
+      this.body.stance === 'standing' &&
+      this.stepDistance > 1.25
+    ) {
       this.audio.play('step');
       this.stepDistance = 0;
     }
     if (!wasGrounded && this.body.grounded) this.audio.play('land');
     if (!this.online) {
+      const validDrops = this.trainingDrops.filter((item) => item.expiresAt > this.elapsed);
+      if (validDrops.length !== this.trainingDrops.length) {
+        this.trainingDrops = validDrops;
+        this.syncDroppedItems(validDrops);
+      }
       this.buyAllowed =
         this.elapsed <= 90 &&
         Math.hypot(
@@ -831,6 +1062,17 @@ export class Game {
 
   private frame(): void {
     const dt = Math.min(this.engine.getDeltaTime() / 1000, 0.25);
+    this.aimBlend += (Number(this.aiming) - this.aimBlend) * (1 - Math.exp(-18 * dt));
+    this.camera.fov = (this.settings.fov * (1 - this.aimBlend * 0.28) * Math.PI) / 180;
+    this.flashlight.setEnabled(this.active && this.flashlightOn && this.matchHealth > 0);
+    if (this.flashlight.isEnabled()) {
+      const direction = shotDirection(this.yaw, this.pitch, 0, 0);
+      const origin = { ...this.body.position, y: this.body.position.y + this.body.eyeHeight };
+      this.flashlight.range = Math.min(
+        24,
+        ...this.world.solids.map((solid) => rayBox(origin, direction, solid) + 0.15),
+      );
+    }
     if (this.active) {
       this.renderAlpha = this.clock.advance(dt, (step) => this.simulate(step));
       this.cameraCorrection.scaleInPlace(Math.exp(-18 * dt));
@@ -851,6 +1093,8 @@ export class Game {
         : 0;
       this.weapon.position.y = -0.24 + bob - reloadDip * 0.16 - deployDip;
       this.weapon.position.z = 0.55 - this.recoil * (this.tool === 'knife' ? -0.16 : 0.035);
+      this.weapon.position.x = 0.23 * (1 - this.aimBlend);
+      this.weapon.position.y += this.aimBlend * 0.08;
       this.weapon.rotation.x =
         -this.recoil * (this.tool === 'knife' ? 0.75 : 0.07) - reloadDip * 0.5 + deployDip;
       this.weapon.rotation.z =
@@ -858,8 +1102,16 @@ export class Game {
       if (this.tool === 'firearm')
         animateWeapon(this.weapon, this.elapsed, this.recoil, reloading, deploying);
       else animateEquipmentView(this.weapon, this.elapsed, this.recoil);
-      if (this.tool === 'grenade')
-        this.weapon.setEnabled(this.hasStarted && this.equipment.grenades > 0);
+      this.weapon.setEnabled(
+        this.hasStarted &&
+          (this.tool === 'firearm'
+            ? this.gun.inventory[this.slot].owned
+            : this.tool === 'grenade'
+              ? this.equipment.grenadeSlots[this.grenadeSlot]
+              : this.tool === 'bomb'
+                ? this.hasBomb
+                : true),
+      );
     } else {
       this.clock.reset();
       if (!this.localMatch) this.updateEffects(dt);
@@ -925,8 +1177,10 @@ export class Game {
     this.body.sprinting =
       this.body.moving &&
       own.stance === 'standing' &&
+      (this.keys.has('ControlLeft') || this.keys.has('ControlRight')) &&
       !this.keys.has('ShiftLeft') &&
-      !this.keys.has('ShiftRight');
+      !this.keys.has('ShiftRight') &&
+      !this.aiming;
     this.contacts = state.actors
       .filter((a) => a.id !== state.self && a.health > 0)
       .map((a) => ({ x: a.position.x, z: a.position.z }));
@@ -943,10 +1197,17 @@ export class Game {
     if (own.health <= 0) {
       this.keys.clear();
       this.trigger = false;
+      this.aimHeld = false;
       this.body.moving = false;
       this.body.sprinting = false;
     }
     if (respawn) {
+      if (own.commandSequences) {
+        this.fireSequence = Math.max(this.fireSequence, own.commandSequences.fire);
+        this.reloadSequence = Math.max(this.reloadSequence, own.commandSequences.reload);
+        this.purchaseSequence = Math.max(this.purchaseSequence, own.commandSequences.buy);
+        this.dropSequence = Math.max(this.dropSequence, own.commandSequences.drop);
+      }
       this.gun = new WeaponController(seedFor(own.id) + own.deaths);
       this.gun.slot = own.weapon;
       this.gun.resetTrigger(this.fireSequence);
@@ -963,7 +1224,21 @@ export class Game {
       this.replaceWeapon();
     }
     this.equipment.grenades = own.grenades;
+    if (own.grenadeSlots) this.equipment.grenadeSlots = own.grenadeSlots;
+    this.hasBomb =
+      state.rounds.bomb?.status === 'carried' && state.rounds.bomb.carrierId === state.self;
+    this.syncDroppedItems(state.droppedItems ?? []);
     if (own.weapon === this.slot) this.gun.reconcile(own.weaponState, this.elapsed);
+    else
+      this.gun.inventory = {
+        primary: { ...own.weaponState.inventory.primary },
+        secondary: { ...own.weaponState.inventory.secondary },
+      };
+    if (
+      (this.tool === 'firearm' && !this.gun.inventory[this.slot].owned) ||
+      (this.tool === 'bomb' && !this.hasBomb)
+    )
+      this.switchTool('knife');
     if (own.hits > this.hits) {
       this.hitUntil = this.elapsed + 0.2;
       this.audio.play('hit');
@@ -1075,6 +1350,17 @@ export class Game {
 
   private emitSnapshot(): void {
     this.events.onSnapshot({
+      aiming: this.aiming,
+      flashlight: this.flashlightOn,
+      equipmentSlot: this.equipmentSlot,
+      equippedOwned:
+        this.tool === 'firearm'
+          ? this.gun.inventory[this.slot].owned
+          : this.tool === 'grenade'
+            ? this.equipment.grenadeSlots[this.grenadeSlot]
+            : this.tool === 'bomb'
+              ? this.hasBomb
+              : true,
       renderScale: 1 / this.engine.getHardwareScalingLevel(),
       shadows: this.scene.shadowsEnabled,
       map: this.mapId,
@@ -1084,7 +1370,7 @@ export class Game {
       weaponVisible: this.weaponMeshes.some(
         (mesh) => mesh.isEnabled() && this.scene.getActiveMeshes().indexOf(mesh) >= 0,
       ),
-      fov: this.settings.fov,
+      fov: (this.camera.fov * 180) / Math.PI,
       reserve: this.gun.reserve,
       health: this.matchHealth,
       armor: this.wallet.armor,
@@ -1097,7 +1383,12 @@ export class Game {
         (this.tool === 'firearm' && this.gun.isDeploying(this.elapsed)),
       speed: this.body.speed,
       spread: spreadFor(
-        { speed: this.body.speed, grounded: this.body.grounded, stance: this.body.stance },
+        {
+          speed: this.body.speed,
+          grounded: this.body.grounded,
+          stance: this.body.stance,
+          aiming: this.aiming,
+        },
         this.gun.burst,
       ),
       impacts: this.impactCount,

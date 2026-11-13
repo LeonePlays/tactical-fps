@@ -4,9 +4,12 @@ import type { WeaponState } from '../game/weapons';
 import { SHOP, type BuyItem } from '../game/shop';
 import type { MovementInput, Vec3 } from '../game/physics';
 import type { WeaponSlot } from '../game/ballistics';
-export const PROTOCOL_VERSION = 4 as const;
+export const PROTOCOL_VERSION = 5 as const;
 export interface MatchInput extends MovementInput {
-  tool: 'firearm' | 'knife' | 'grenade';
+  tool: 'firearm' | 'knife' | 'grenade' | 'bomb';
+  dropSequence: number;
+  grenadeSlot: 0 | 1;
+  aiming: boolean;
   interact: boolean;
   yaw: number;
   pitch: number;
@@ -25,6 +28,8 @@ export interface ActorState {
   aiState?: string;
   team: Team;
   grenades: number;
+  grenadeSlots?: [boolean, boolean];
+  commandSequences?: { fire: number; reload: number; buy: number; drop: number };
   id: string;
   bot: boolean;
   position: Vec3;
@@ -57,9 +62,22 @@ export interface MatchState {
   hostId?: string;
   rounds: RoundSnapshot;
   grenades: { id: string; owner: string; position: Vec3; remaining: number }[];
+  droppedItems?: DroppedItemState[];
+}
+export interface DroppedItemState {
+  id: string;
+  kind: WeaponSlot | 'grenade';
+  position: Vec3;
+  ammo?: number;
+  reserve?: number;
+  expiresAt: number;
 }
 export const IDLE_INPUT: MatchInput = {
   tool: 'firearm',
+  dropSequence: 0,
+  grenadeSlot: 0,
+  aiming: false,
+  walk: false,
   interact: false,
   forward: 0,
   right: 0,
@@ -92,7 +110,7 @@ export function parseInput(value: unknown): MatchInput | null {
     return null;
   if (!['sprint', 'jump', 'fire', 'reload'].every((key) => typeof x[key] === 'boolean'))
     return null;
-  for (const key of ['fireSequence', 'buySequence', 'reloadSequence'])
+  for (const key of ['fireSequence', 'buySequence', 'reloadSequence', 'dropSequence'])
     if (
       x[key] !== undefined &&
       (!Number.isSafeInteger(x[key]) || (x[key] as number) < 0 || (x[key] as number) > 1e9)
@@ -104,11 +122,18 @@ export function parseInput(value: unknown): MatchInput | null {
     (typeof x.buyItem !== 'string' || !Object.hasOwn(SHOP, x.buyItem))
   )
     return null;
-  if (x.tool !== undefined && !['firearm', 'knife', 'grenade'].includes(String(x.tool)))
+  if (x.tool !== undefined && !['firearm', 'knife', 'grenade', 'bomb'].includes(String(x.tool)))
     return null;
+  if (x.grenadeSlot !== undefined && x.grenadeSlot !== 0 && x.grenadeSlot !== 1) return null;
+  for (const key of ['walk', 'aiming'])
+    if (x[key] !== undefined && typeof x[key] !== 'boolean') return null;
   if (x.interact !== undefined && typeof x.interact !== 'boolean') return null;
   return {
     tool: (x.tool as MatchInput['tool'] | undefined) ?? 'firearm',
+    dropSequence: (x.dropSequence as number | undefined) ?? 0,
+    grenadeSlot: (x.grenadeSlot as 0 | 1 | undefined) ?? 0,
+    aiming: x.aiming === true,
+    walk: x.walk === true,
     interact: x.interact === true,
     reloadSequence: (x.reloadSequence as number | undefined) ?? 0,
     fireSequence: (x.fireSequence as number | undefined) ?? 0,

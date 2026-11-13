@@ -13,12 +13,14 @@ export interface MovementInput {
   forward: number;
   right: number;
   sprint: boolean;
+  walk?: boolean;
+  aiming?: boolean;
   jump: boolean;
   stance: Stance;
 }
 export const HEIGHT: Record<Stance, number> = { standing: 1.8, crouching: 1.12, prone: 0.55 };
 // Metres/second, scaled from a 250 units/s classic run at 0.0254 m/unit.
-export const SPEED = { run: 6.35, walk: 3.302, crouching: 2.117, prone: 1.15 };
+export const SPEED = { run: 6.35, sprint: 8.255, walk: 3.302, crouching: 2.117, prone: 1.15 };
 export const MOVEMENT = {
   groundAcceleration: 5,
   airAcceleration: 10,
@@ -93,15 +95,16 @@ export class PlayerBody {
       this.velocityY = this.stance === 'crouching' ? 4.5 : MOVEMENT.jumpSpeed;
       this.grounded = false;
     }
-    // sprint is retained as a wire field for compatibility; Shift now means walk.
     const maxSpeed =
       this.stance === 'prone'
         ? SPEED.prone
         : this.stance === 'crouching'
           ? SPEED.crouching
-          : input.sprint
+          : input.walk || input.aiming
             ? SPEED.walk
-            : SPEED.run;
+            : input.sprint
+              ? SPEED.sprint
+              : SPEED.run;
     const magnitude = Math.hypot(input.forward, input.right);
     const norm = Math.max(1, magnitude);
     const wishX = (Math.sin(yaw) * input.forward + Math.cos(yaw) * input.right) / (magnitude || 1);
@@ -139,7 +142,8 @@ export class PlayerBody {
       this.moveVertical(this.velocityY * sub);
     }
     this.moving = this.speed > 0.1;
-    this.sprinting = this.stance === 'standing' && !input.sprint && this.moving;
+    this.sprinting =
+      this.stance === 'standing' && !!input.sprint && !input.walk && !input.aiming && this.moving;
   }
 
   private moveAxis(axis: 'x' | 'z', amount: number): void {

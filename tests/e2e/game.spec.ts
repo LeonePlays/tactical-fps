@@ -102,7 +102,7 @@ test('WebGL scene is playable: pointer lock, targets, WASD, Shift walking, stanc
   expect(sprinted.z - walked.z).toBeLessThan(walked.z - before.z);
   await hold(page, 'd', 450);
   expect((await position(page)).x).toBeGreaterThan(sprinted.x + 0.4);
-  await page.keyboard.press('Control');
+  await page.keyboard.press('c');
   await expect(page.locator('#stance-label')).toHaveText('AGACHADO');
   await page.keyboard.press('z');
   await expect(page.locator('#stance-label')).toHaveText('DEITADO');

@@ -26,7 +26,7 @@ export function renderView(root: HTMLElement): void {
       <div class="menu-content">
         <header class="topbar">
           <a href="#" class="wordmark" data-action="home">TACTICAL<span>FPS</span><small>INDEPENDENT TACTICAL EXPERIENCE</small></a>
-          <div class="topbar-right"><span class="status-dot"></span> SESSÃO LOCAL <span class="version">BETA 0.4</span></div>
+          <div class="topbar-right"><span class="status-dot"></span> SESSÃO LOCAL <span class="version">BETA 0.4.1</span></div>
         </header>
         <nav class="tabs" aria-label="Menu">
           <button class="active" data-action="play-tab">JOGAR <span>01</span></button>
@@ -57,10 +57,10 @@ export function renderView(root: HTMLElement): void {
       <div class="hud-score"><span class="label">ALVOS ATINGIDOS</span><strong id="hit-count">00</strong><small>PRECISÃO <span id="accuracy">—</span></small></div>
       <div id="objective-banner" hidden></div><div id="team-score" hidden><span id="team-alpha-score">ALPHA 0</span><b id="match-clock">03:00</b><span id="team-bravo-score">0 BRAVO</span></div><ol id="killfeed" aria-live="polite"></ol><div id="crosshair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <div id="hit-marker" hidden aria-hidden="true">×</div>
-      <div id="training-tip" class="training-tip">WASD correr · SHIFT andar · B comprar · R recarregar</div>
+      <div id="training-tip" class="training-tip">WASD mover · CTRL correr · SHIFT silencioso · C agachar · B comprar</div>
       <div class="hud-bottom-left"><div class="health-icon">+</div><strong><span id="health-count">100</span><small>VIDA</small></strong><span class="armor-icon">◇</span><strong><span id="armor-count">0</span><small>COLETE</small></strong><div class="stance-indicator"><b id="stance-label">EM PÉ</b><span id="movement-label">PRONTO</span></div></div>
       <div id="money-count" aria-label="Dinheiro">$16000</div>
-      <div class="hud-bottom-center"><span>B <b>COMPRAR</b></span><span>1 / 2 <b>ARMAS</b></span><span>3 / 4 <b>FACA / HE</b></span><span>TAB <b>PLACAR</b></span><span>ESC <b>PAUSAR</b></span></div>
+      <div class="hud-bottom-center"><span>B <b>COMPRAR</b></span><span>1–6 <b>EQUIPAMENTO</b></span><span>E <b>USAR</b></span><span>Q <b>LARGAR</b></span><span>TAB <b>PLACAR</b></span><span>ESC <b>PAUSAR</b></span></div>
       <div class="hud-ammo"><span class="label">CARABINA T-04</span><div><strong id="ammo-count">30</strong><span>/ <b id="reserve-count">90</b></span></div><small id="reload-label">R · RECARREGAR</small></div>
       <div class="hud-coordinates"><span id="coordinates">X 0 / Z -22</span><span id="fps-counter" hidden></span></div>
       <aside id="buy-panel" hidden role="dialog" aria-modal="true" aria-labelledby="buy-title"><h2 id="buy-title">COMPRAR EQUIPAMENTO</h2><p>Use as teclas 1–6 · B para fechar</p><ol><li>Carabina T-04 <b>$2700</b></li><li>Pistola P-09 <b>$500</b></li><li>Munição primária (30) <b>$60</b></li><li>Munição secundária (12) <b>$25</b></li><li>Colete <b>$650</b></li><li>Granada HE <b>$300</b></li></ol><p id="buy-zone"></p><p id="buy-message" role="status"></p></aside>
@@ -104,14 +104,16 @@ export function renderView(root: HTMLElement): void {
           <div><span class="key-group"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><b>MOVIMENTAR</b></div>
           <div><span class="key-group"><kbd>MOUSE</kbd></span><b>OLHAR / MIRAR</b></div>
           <div><span class="key-group"><kbd>SHIFT</kbd> + <kbd>W</kbd></span><b>ANDAR SILENCIOSAMENTE</b></div>
-          <div><span class="key-group"><kbd>CTRL</kbd></span><b>AGACHAR / LEVANTAR</b></div>
+          <div><span class="key-group"><kbd>CTRL</kbd></span><b>CORRER (SEGURAR)</b></div>
+          <div><span class="key-group"><kbd>C</kbd></span><b>AGACHAR / LEVANTAR</b></div>
           <div><span class="key-group"><kbd>Z</kbd></span><b>DEITAR / LEVANTAR</b></div>
           <div><span class="key-group"><kbd>ESPAÇO</kbd></span><b>SALTAR</b></div>
-          <div><span class="key-group"><kbd>CLIQUE ESQUERDO</kbd></span><b>DISPARAR</b></div>
-          <div><span class="key-group"><kbd>R</kbd></span><b>RECARREGAR</b></div><div><span class="key-group"><kbd>1</kbd> / <kbd>2</kbd></span><b>PRIMÁRIA / SECUNDÁRIA</b></div><div><span class="key-group"><kbd>3</kbd> / <kbd>4</kbd></span><b>FACA / GRANADA</b></div><div><span class="key-group"><kbd>E</kbd></span><b>PLANTAR / DESARMAR BOMBA</b></div><div><span class="key-group"><kbd>B</kbd></span><b>COMPRAR (TECLAS 1–6)</b></div>
+          <div><span class="key-group"><kbd>CLIQUE ESQUERDO</kbd></span><b>ATIRAR / GOLPEAR / LANÇAR</b></div>
+          <div><span class="key-group"><kbd>CLIQUE DIREITO</kbd></span><b>MIRAR (SEGURAR)</b></div>
+          <div><span class="key-group"><kbd>R</kbd></span><b>RECARREGAR</b></div><div><span class="key-group"><kbd>1</kbd> / <kbd>2</kbd></span><b>PRIMÁRIA / SECUNDÁRIA</b></div><div><span class="key-group"><kbd>3</kbd></span><b>FACA</b></div><div><span class="key-group"><kbd>4</kbd> / <kbd>5</kbd></span><b>GRANADA HE · SLOT 1 / 2</b></div><div><span class="key-group"><kbd>6</kbd></span><b>BOMBA (QUANDO CARREGADA)</b></div><div><span class="key-group"><kbd>SCROLL</kbd></span><b>TROCAR EQUIPAMENTO</b></div><div><span class="key-group"><kbd>E</kbd></span><b>USAR / PEGAR / PLANTAR / DESARMAR</b></div><div><span class="key-group"><kbd>F</kbd></span><b>LANTERNA</b></div><div><span class="key-group"><kbd>Q</kbd></span><b>LARGAR EQUIPAMENTO</b></div><div><span class="key-group"><kbd>B</kbd></span><b>COMPRAR (TECLAS 1–6)</b></div><div><span class="key-group"><kbd>TAB</kbd></span><b>PLACAR (SEGURAR)</b></div><div><span class="key-group"><kbd>T</kbd> / <kbd>Y</kbd></span><b>CHAT GLOBAL / EQUIPE · ONLINE</b></div><div><span class="key-group"><kbd>H</kbd></span><b>AJUSTES DO ANFITRIÃO · ONLINE</b></div>
           <div><span class="key-group"><kbd>ESC</kbd></span><b>LIBERAR MOUSE / PAUSAR</b></div>
         </div>
-        <p class="control-note">Clique em iniciar para capturar o mouse. Use <kbd>ESC</kbd> para liberá-lo. Agachar e deitar são alternáveis; o teto precisa estar livre para levantar. Não é possível saltar deitado.</p>
+        <p class="control-note">Clique em iniciar para capturar o mouse. Use <kbd>ESC</kbd> para liberá-lo. Agachar e deitar são alternáveis; o teto precisa estar livre para levantar. Não é possível saltar deitado. Segure o botão direito para mirar. Os slots 4 e 5 usam granadas HE. Chat e painel do anfitrião funcionam somente em sala online; <kbd>H</kbd> é exclusivo do anfitrião.</p>
         <button class="button primary" data-action="close-controls">ENTENDIDO ${arrow}</button>
       </section>
     </div>

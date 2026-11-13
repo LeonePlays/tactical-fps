@@ -1,6 +1,6 @@
 # TACTICAL FPS
 
-**Beta 0.4 · FPS 3D para navegadores de computador.** Treino e partidas offline funcionam como visitante, sem conta Vercel, ChatGPT ou Supabase. Requer teclado, mouse e WebGL; não há versão mobile.
+**Beta 0.4.1 · FPS 3D para navegadores de computador.** Treino e partidas offline funcionam como visitante, sem conta Vercel, ChatGPT ou Supabase. Requer teclado, mouse e WebGL; não há versão mobile.
 
 A fonte existente usa **TypeScript, Vite e Babylon.js**. O motor foi preservado: na inspeção do repositório disponível, a principal era `tactical-fps`; as branches `main` e `opencode-*` citadas no pedido não apareceram entre as branches acessíveis. Nenhum deployment compilado foi usado como substituto da fonte. O planejamento GDD 1.4, `docs/GDD.md` e as pastas existentes permanecem preservados.
 
@@ -38,20 +38,31 @@ Os bots usam grafo de navegação, linha de visão, campo de visão, memória da
 
 ## Controles
 
-| Entrada         | Ação                                                    |
-| --------------- | ------------------------------------------------------- |
-| Mouse / WASD    | Mirar / correr                                          |
-| Shift           | Andar silenciosamente                                   |
-| Ctrl / Z        | Alternar agachado / deitado                             |
-| Espaço          | Saltar; indisponível deitado                            |
-| Clique esquerdo | Atirar, golpear ou lançar HE                            |
-| 1 / 2           | Primária / secundária                                   |
-| 3 / 4           | Faca / granada HE                                       |
-| R               | Recarregar com reserva finita                           |
-| B, depois 1–6   | Comprar arma, munição, colete ou granada                |
-| E (segurar)     | Plantar, recuperar ou desarmar bomba                    |
-| Tab (segurar)   | Placar com jogadores, bots, equipes e resultados atuais |
-| ESC             | Liberar mouse / pausar                                  |
+| Entrada         | Ação                                                     |
+| --------------- | -------------------------------------------------------- |
+| Mouse / WASD    | Olhar / movimentar                                       |
+| Shift           | Andar silenciosamente                                    |
+| Ctrl            | Correr enquanto a tecla estiver pressionada              |
+| C / Z           | Alternar agachado / deitado                              |
+| Espaço          | Saltar; indisponível deitado                             |
+| Clique esquerdo | Atirar, golpear ou lançar HE                             |
+| Clique direito  | Mirar enquanto o botão estiver pressionado               |
+| 1 / 2           | Primária / secundária                                    |
+| 3 / 4 / 5       | Faca / granada HE do slot 1 / granada HE do slot 2       |
+| 6               | Bomba, quando estiver carregando no modo de objetivo     |
+| Scroll do mouse | Percorrer armas e equipamentos disponíveis               |
+| R               | Recarregar com reserva finita                            |
+| B, depois 1–6   | Comprar arma, munição, colete ou granada                 |
+| E               | Usar/interagir; recuperar equipamento próximo            |
+| E (segurar)     | Plantar ou desarmar bomba                                |
+| F               | Ligar/desligar lanterna                                  |
+| Q               | Largar o equipamento selecionado; a faca é permanente    |
+| Tab (segurar)   | Placar com jogadores, bots, equipes e resultados atuais  |
+| ESC             | Liberar mouse / pausar                                   |
+| T / Y           | Chat global / da equipe, somente em sala online          |
+| H               | Ajustes rápidos, somente para o anfitrião de sala online |
+
+Agachar e deitar são alternáveis. A corrida exige estar em pé; Shift tem prioridade para caminhar silenciosamente. Os slots de granada carregam HE; não há granadas de fumaça ou luz nesta versão. Chat e ajustes do anfitrião dependem de um servidor de partidas compatível iniciado; não enviam mensagens no modo offline.
 
 Movimento inclui aceleração, atrito, counter-strafing, controle aéreo, posturas, colisões e subida de degraus baixos de até 0,30 m. Armas têm recuo, dispersão por movimento, tempo de troca, recarga e impactos. A HE ricocheteia e causa dano com queda por distância e oclusão das paredes; pode ferir quem a lançou.
 
@@ -88,7 +99,7 @@ npm run test:e2e
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e
 ```
 
-A suíte cobre física, mapas, navegação, dificuldades, armas, regras, configuração e protocolo. Os testes visitantes usam contexto novo sem autenticação simulada e bloqueiam Supabase. Testes de conta e salas têm fixtures isoladas; não comprovam o serviço de contas real. Consulte [o relatório de verificação](docs/QA-0.4.md) para os comandos executados, resultados e limites.
+A suíte cobre física, mapas, navegação, dificuldades, armas, regras, configuração e protocolo. Os testes visitantes usam contexto novo sem autenticação simulada e bloqueiam Supabase. Testes de conta e salas têm fixtures isoladas; não comprovam o serviço de contas real. Consulte [a verificação dos controles 0.4.1](docs/QA-0.4.1.md) e [a verificação da base 0.4](docs/QA-0.4.md) para comandos, resultados e limites.
 
 ## Contas e multiplayer
 
@@ -96,9 +107,9 @@ A suíte cobre física, mapas, navegação, dificuldades, armas, regras, configu
 
 No último diagnóstico registrado, em **10/11/2026**, `rrxwarhfizeuhowqpzle.supabase.co` retornava **NXDOMAIN**. O código não restaura esse projeto: cadastro/login real exige projeto ativo e configuração correta. Veja [contas e diagnóstico](supabase/README.md) para URL/chave publicável, confirmação de e-mail e função de username. Nunca coloque chave administrativa em variáveis `VITE_`.
 
-**ENCONTRAR SERVIDORES** consulta `/rooms` do servidor informado e permite criar/entrar por código. É uma lista real das salas desse processo, não matchmaking público. Salas entre jogadores exigem conta válida e um servidor Node/WebSocket separado; até oito participantes incluindo bots. O anfitrião pode reiniciar a sala, e a função de anfitrião passa a outro humano conectado quando ele sai. [Execução, LAN e publicação do servidor](server/README.md).
+**ENCONTRAR SERVIDORES** consulta `/rooms` do servidor informado e permite criar/entrar por código. É uma lista real das salas desse processo, não matchmaking público. Salas entre jogadores exigem conta válida e um servidor Node/WebSocket separado; até oito participantes incluindo bots. O anfitrião pode reiniciar e configurar a sala com H; a função passa a outro humano conectado quando ele sai. T abre o chat da sala e Y limita as mensagens aos colegas de equipe. [Execução, LAN e publicação do servidor](server/README.md).
 
-Frontend e servidor usam **protocolo 4** e devem ser atualizados juntos. O servidor está preparado para execução local e publicação posterior; a Vercel estática não hospeda esse processo.
+Frontend e servidor devem ser atualizados juntos, pois a versão do protocolo é verificada ao conectar. O servidor está preparado para execução local e publicação posterior; a Vercel estática não hospeda esse processo.
 
 ## Publicar e manter
 
@@ -108,6 +119,6 @@ Variáveis opcionais: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` e `VI
 
 Os módulos ficam em `src/game/` (simulação, mapas, IA e renderização), `src/network/` (protocolo e transportes), `src/ui/` (interface e apresentação), `src/core/` (relógio e ajustes) e `src/auth/`. `server/`, `public/assets/`, `docs/` e `tests/` foram preservados. Consulte [arquitetura](docs/ARCHITECTURE.md), [histórico](docs/CHANGELOG.md), [próximas etapas](docs/NEXT-STEPS.md) e [contribuição](docs/CONTRIBUTING.md).
 
-Campanha narrativa, porto, matchmaking público, ranking validado, chat/voz e reconexão com placar continuam planejados. Multiplayer ainda requer hospedagem, testes de carga e refinamento de latência antes de competição pública. Esta beta não promete ausência absoluta de bugs.
+Campanha narrativa, porto, matchmaking público, ranking validado, chat de voz e reconexão com placar continuam planejados. Multiplayer ainda requer hospedagem, testes de carga e refinamento de latência antes de competição pública. Esta beta não promete ausência absoluta de bugs.
 
 Copyright © 2026 LeonePlays. **All Rights Reserved — Proprietary Software.** Consulte [LICENSE.md](LICENSE.md). Dependências preservam suas licenças; Babylon.js é Apache-2.0, e Vite, Supabase JS e ws usam MIT.

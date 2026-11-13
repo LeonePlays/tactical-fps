@@ -25,7 +25,7 @@ export function buy(
   const price = SHOP[item].price;
   if (wallet.money < price) return 'Dinheiro insuficiente.';
   if (item === 'grenade') {
-    if (!equipment || !equipment.addGrenade()) return 'Você já carrega uma granada.';
+    if (!equipment || !equipment.addGrenade()) return 'Os dois slots de granada estão ocupados.';
   } else if (item === 'armor') {
     if (wallet.armor === 100) return 'Você já tem colete completo.';
     wallet.armor = 100;

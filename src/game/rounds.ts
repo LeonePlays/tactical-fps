@@ -132,6 +132,21 @@ export class RoundController {
     if (this.mode === 'team-deathmatch' && this.phase === 'active') this.scores[team]++;
   }
 
+  /** Only the actual living carrier may release the objective. Pickup still requires E. */
+  dropBomb(actorId: string, location: RoundPosition): boolean {
+    if (
+      !['active', 'freeze'].includes(this.phase) ||
+      this.bomb?.status !== 'carried' ||
+      this.bomb.carrierId !== actorId
+    )
+      return false;
+    this.bomb.status = 'dropped';
+    this.bomb.carrierId = null;
+    this.bomb.position = position(location);
+    this.interaction = null;
+    return true;
+  }
+
   snapshot(): RoundSnapshot {
     return {
       mode: this.mode,
@@ -187,6 +202,21 @@ export class RoundController {
     }
     for (const actor of actors) this.seenTeams.add(actor.team);
     this.syncCarrier(actors);
+    if (this.bomb?.status === 'dropped') {
+      const picker = actors.find(
+        (actor) =>
+          actor.team === 'alpha' &&
+          actor.health > 0 &&
+          interactingIds.includes(actor.id) &&
+          distance(actor.position, this.bomb!.position) <= ROUND_RULES.pickupRadius &&
+          Math.abs((actor.position.y ?? 0) - this.bomb!.position.y) <= 1,
+      );
+      if (picker) {
+        this.bomb.status = 'carried';
+        this.bomb.carrierId = picker.id;
+        this.bomb.position = position(picker.position);
+      }
+    }
     if (this.phase === 'freeze') {
       this.remaining = Math.max(0, this.remaining - dt);
       if (this.remaining <= EPSILON) {
@@ -290,20 +320,6 @@ export class RoundController {
       return events;
     }
     const bomb = this.bomb!;
-    if (bomb.status === 'dropped') {
-      const picker = alpha.find(
-        (actor) =>
-          actor.health > 0 &&
-          interactingIds.includes(actor.id) &&
-          distance(actor.position, bomb.position) <= ROUND_RULES.pickupRadius &&
-          Math.abs((actor.position.y ?? 0) - bomb.position.y) <= 1,
-      );
-      if (picker) {
-        bomb.status = 'carried';
-        bomb.carrierId = picker.id;
-        bomb.position = position(picker.position);
-      }
-    }
     const carrier = alpha.find((actor) => actor.id === bomb.carrierId && actor.health > 0);
     if (
       carrier &&

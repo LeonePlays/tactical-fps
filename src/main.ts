@@ -11,6 +11,7 @@ import './styles/menu.css';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from './core/settings';
 import { renderView } from './ui/view';
 import { mountMatchMenu } from './ui/match-menu';
+import { mountOnlineControls } from './ui/online-controls';
 import {
   PROFILE_KEY,
   MODE_NAMES,
@@ -31,7 +32,7 @@ if (!root) throw new Error('App root is missing');
 renderView(root);
 const buildBadge = document.createElement('span');
 buildBadge.className = 'build-badge';
-buildBadge.textContent = 'TACTICAL FPS · BETA 0.4';
+buildBadge.textContent = 'TACTICAL FPS · BETA 0.4.1';
 document.querySelector('.menu-footer')!.append(buildBadge);
 const el = <T extends HTMLElement = HTMLElement>(id: string) => {
   const node = document.getElementById(id);
@@ -51,7 +52,14 @@ const startLabel = el('start-label');
 const startHelp = el('start-help');
 const settingsMessage = el('settings-message');
 let roomConnection:
-  | { send(input: MatchInput): void; close(): void; step?(dt: number): void; restart?(): void }
+  | {
+      send(input: MatchInput): void;
+      close(): void;
+      step?(dt: number): void;
+      restart?(): void;
+      chat?(text: string, team: boolean): void;
+      configure?(config: Partial<MatchConfig>): void;
+    }
   | undefined;
 let connecting = false;
 let roomReady = false;
@@ -84,6 +92,12 @@ const account = mountAccount((user, cloudSettings) => {
   // Local practice stays available across authentication changes.
   if (previousAccount && previousAccount !== accountId && !localMode && roomConnection)
     disconnectRoom();
+});
+const onlineControls = mountOnlineControls({
+  pause: () => game?.pause(),
+  resume: () => game?.enter(),
+  sendChat: (text, team) => roomConnection?.chat?.(text, team),
+  configure: (config) => roomConnection?.configure?.(config),
 });
 function saveTraining() {
   if (!roomReady && inSession && latestSnapshot) {
@@ -440,6 +454,8 @@ async function joinRoom(create: boolean, local = false) {
       config,
       name: profile.name,
       room: el<HTMLInputElement>('room-code').value.trim().toUpperCase(),
+      message: onlineControls.receive,
+      notice: onlineControls.notice,
       state: (state: MatchState) => {
         if (generation !== connectionGeneration) return;
         if (latestRoom && state.matchId !== latestRoom.matchId) {
@@ -457,6 +473,7 @@ async function joinRoom(create: boolean, local = false) {
           el('quick-play').textContent = 'ENTRAR NA PARTIDA';
           startHelp.textContent = 'Nova partida pronta. Clique em ENTRAR NA PARTIDA para jogar.';
         }
+        if (latestRoom && state.config.map !== latestRoom.config.map) roomReady = false;
         if (!roomReady) {
           gameGeneration++;
           game?.dispose();
@@ -514,6 +531,7 @@ async function joinRoom(create: boolean, local = false) {
         }
         connecting = false;
         latestRoom = state;
+        onlineControls.setState(local ? null : state);
         pause.querySelector<HTMLButtonElement>('[data-action="restart"]')!.hidden =
           !local && state.hostId !== state.self;
         updateScoreboard(state);
@@ -598,6 +616,7 @@ el('local-bots').addEventListener('click', () => {
 el('create-room').addEventListener('click', () => void joinRoom(true));
 el('join-room').addEventListener('click', () => void joinRoom(false));
 function disconnectRoom(reboot = true) {
+  onlineControls.setState(null);
   connectionGeneration++;
   gameGeneration++;
   roomConnection?.close();

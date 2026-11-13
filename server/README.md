@@ -1,4 +1,4 @@
-# Servidor de partidas — beta 0.4 / protocolo 4
+# Servidor de partidas — beta 0.4 / protocolo 5
 
 **Treino e bots offline não precisam deste servidor nem de conta.** No menu, configure a partida e use **CRIAR PARTIDA OFFLINE**. Este documento trata de salas reais entre jogadores, que exigem autenticação Supabase e um processo Node/WebSocket separado.
 
@@ -20,6 +20,8 @@ npm run dev
 Abra o frontend do Vite, escolha mapa, modo, bots, dificuldade e limites e entre com conta válida. Em **ENCONTRAR SERVIDORES**, informe `ws://127.0.0.1:3001`, consulte **ATUALIZAR SALAS** ou use **CRIAR SALA ONLINE**. A lista vem diretamente do processo informado. Também é possível informar o código para entrar. Quando a arena estiver pronta, clique em **ENTRAR NA PARTIDA** para capturar o mouse.
 
 Uma conta ocupa no máximo uma conexão por servidor. A sala comporta até oito participantes incluindo zero a quatro bots. Sair pelo menu desconecta o jogador. O anfitrião pode reiniciar a sala; quando sai, a função passa a outro humano conectado. Quando o último humano sai, a sala e os bots são removidos. Reiniciar o processo apaga todas as salas.
+
+Durante a partida, T abre o chat da sala e Y o chat da equipe. Enter envia e Esc fecha. As mensagens ficam apenas na sessão e não são armazenadas em banco. H abre o painel de ajustes somente para o anfitrião: mapa, modo, bots, dificuldade e limites. Aplicar inicia uma nova partida para todos os humanos conectados, mantendo a sala e os nomes. Abrir chat ou painel libera o mouse; o servidor continua simulando a partida.
 
 ## Regras compartilhadas
 
@@ -46,6 +48,8 @@ O frontend aceita `VITE_MATCH_SERVER_URL` no build e endereço manual no menu. U
 - `GET /health`: estado do processo e versão do protocolo.
 - `GET /rooms`: `{ protocol, rooms: [{ code, mode, map, difficulty, players, bots, capacity, phase }] }`. Lista somente salas reais em memória, sem tokens nem IDs de conta; CORS aceita apenas origens configuradas.
 - WebSocket: primeiro frame envia token, criação/entrada, nome, configuração e preferência. O token não vai na URL. Reinício é um comando autorizado somente ao anfitrião.
+- Chat: comando `chat` limita texto a 160 caracteres e frequência a uma mensagem a cada 750 ms; mensagens de equipe chegam somente aos colegas da mesma equipe. No modo sem equipes, use o chat global. Mensagens inválidas recebem aviso sem derrubar a conexão.
+- Configuração: comando `configure` aceita somente o anfitrião e opções validadas. Recria a partida com os humanos existentes e os bots solicitados, incrementando `matchId` para reconstruir o mapa e limpar o estado anterior nos clientes.
 
 O servidor consulta `/auth/v1/user` e revalida a conta a cada minuto. Atualização do token durante a conexão ainda não está implementada; após expirar, entre novamente com sessão renovada pelo SDK. Limites de payload/frequência, 16 salas e 128 jogadores são aplicados. Entradas antigas deixam de mover/interagir; conexões sem mensagens são removidas.
 
@@ -68,4 +72,4 @@ Use processo Node persistente com suporte WebSocket, como VPS/container, e TLS/W
 
 Um processo mantém estado em memória; não escale horizontalmente sem afinidade/coordenação. Hospedagem pública, teste de carga, refinamento de latência, reconexão com placar e monitoramento continuam pendentes. Vercel estática publica apenas o frontend.
 
-Atualize frontend e servidor juntos: handshake, snapshots e `/health` usam **protocolo 4**. Versões incompatíveis são rejeitadas. A origem das regras está em `src/game/`, com tipos e validação em `src/network/protocol.ts`.
+Atualize frontend e servidor juntos: handshake, snapshots e `/health` usam **protocolo 5**. Versões incompatíveis são rejeitadas. A origem das regras está em `src/game/`, com tipos e validação em `src/network/protocol.ts`.
