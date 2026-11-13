@@ -171,3 +171,23 @@ describe('classic acceleration and air control', () => {
     expect(body.position.z).toBeCloseTo(1.65);
   });
 });
+
+describe('walking over architectural steps', () => {
+  it('climbs a low curb without jumping and lands back on the ground', () => {
+    const body = player([box(0, 0.09, 2, 3, 0.18, 2)]);
+    advance(body, { forward: 1 }, 0.55);
+    expect(body.position.y).toBeCloseTo(0.18);
+    expect(body.grounded).toBe(true);
+    advance(body, { forward: 1 }, 1);
+    expect(body.position.y).toBeCloseTo(0);
+  });
+  it('cannot climb a wall or rise into a low ceiling', () => {
+    const wall = player([box(0, 1, 2, 3, 2, 1)]);
+    advance(wall, { forward: 1 }, 1);
+    expect(wall.position.z).toBeLessThan(1.3);
+    const ceiling = player([box(0, 0.1, 2, 3, 0.2, 2), box(0, 1.95, 2, 3, 0.2, 2)]);
+    advance(ceiling, { forward: 1 }, 1);
+    expect(ceiling.position.z).toBeLessThan(0.71);
+    expect(ceiling.position.y).toBeCloseTo(0);
+  });
+});

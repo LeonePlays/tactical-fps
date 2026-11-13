@@ -1,32 +1,59 @@
-import type { MatchMode } from '../game/rounds';
 import { Match } from '../game/match';
-import type { MatchInput, MatchState } from './protocol';
+import { normalizeMatchConfig, type MatchConfig, type MatchMode } from '../game/match-config';
+import { PROTOCOL_VERSION, type MatchInput, type MatchState } from './protocol';
+
+/** Offline transport is driven by the render loop's fixed60Hz clock, never a second timer. */
 export function localPractice(
   bots: number,
   state: (snapshot: MatchState) => void,
-  mode: MatchMode = 'deathmatch',
+  modeOrConfig: MatchMode | Partial<MatchConfig> = 'deathmatch',
+  name = 'Visitante',
 ) {
-  const match = new Match(mode);
+  const config = normalizeMatchConfig(
+    typeof modeOrConfig === 'string'
+      ? {
+          mode: modeOrConfig,
+          bots,
+          ...(modeOrConfig === 'defuse' ? { timeLimit: 90, scoreLimit: 3 } : {}),
+        }
+      : { ...modeOrConfig, bots },
+  );
+  const match = new Match(config);
   const self = 'local-player';
-  match.add(self);
-  for (let i = 0; i < Math.max(0, Math.min(4, bots)); i++) match.add(`bot-${i}`, true);
-  const timer = setInterval(() => {
-    if (document.pointerLockElement) match.step(0.05);
+  match.add(self, false, config.team, name);
+  for (let i = 0; i < config.bots; i++) match.add(`bot-${i}`, true);
+  let closed = false;
+  const publish = () => {
+    if (closed) return;
     state({
-      protocol: 3,
+      protocol: PROTOCOL_VERSION,
       type: 'state',
       room: 'LOCAL',
       self,
       actors: match.snapshot(),
       ...match.state(),
     });
-  }, 50);
+  };
+  // The caller receives its transport before the first scene/state callback.
+  queueMicrotask(publish);
   return {
     send(input: MatchInput) {
-      match.input(self, input);
+      if (!closed) match.input(self, input);
+    },
+    step(dt: number) {
+      if (!closed) {
+        match.step(dt);
+        publish();
+      }
+    },
+    restart() {
+      if (!closed) {
+        match.restart();
+        publish();
+      }
     },
     close() {
-      clearInterval(timer);
+      closed = true;
     },
   };
 }

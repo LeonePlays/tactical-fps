@@ -118,6 +118,9 @@ export class ClassicHud {
       spread: state.spread.toFixed(5),
       impacts: String(state.impacts),
       deploying: String(state.deploying),
+      map: state.map,
+      renderScale: String(state.renderScale),
+      shadows: String(state.shadows),
     });
     if (!this.root.hidden) this.drawRadar(state);
   }

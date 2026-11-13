@@ -1,5 +1,6 @@
 /** Pure match rules, shared by local practice and the authoritative server. */
-export type MatchMode = 'deathmatch' | 'defuse';
+import type { MatchMode } from './match-config';
+export type { MatchMode } from './match-config';
 export type Team = 'alpha' | 'bravo';
 export type RoundPhase = 'freeze' | 'active' | 'round-over' | 'match-over';
 export interface RoundPosition {
@@ -61,6 +62,13 @@ export interface RoundEvents {
   /** Final result reached; leave it visible until restart(). */
   matchEnded: boolean;
 }
+export interface RoundOptions {
+  /** Session duration for deathmatch; active round duration for defuse. */
+  timeLimit?: number;
+  /** Eliminations for deathmatch; rounds to win for defuse. */
+  scoreLimit?: number;
+  bombSite?: RoundPosition;
+}
 const EPSILON = 1e-7;
 const distance = (a: RoundPosition, b: RoundPosition) => Math.hypot(a.x - b.x, a.z - b.z);
 const position = (p: RoundPosition) => ({ x: p.x, y: p.y ?? 0, z: p.z });
@@ -81,7 +89,29 @@ export class RoundController {
   private reason = '';
   private bomb: BombSnapshot | null = null;
   private interaction: (RoundInteraction & { anchor: RoundPosition }) | null = null;
-  constructor(readonly mode: MatchMode = 'deathmatch') {
+  private readonly seenTeams = new Set<Team>();
+  readonly timeLimit: number;
+  readonly scoreLimit: number;
+  readonly bombSite: { x: number; y: number; z: number };
+  constructor(
+    readonly mode: MatchMode = 'deathmatch',
+    options: RoundOptions = {},
+  ) {
+    const duration = options.timeLimit;
+    const limit = options.scoreLimit;
+    this.timeLimit =
+      typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+        ? duration
+        : mode === 'defuse'
+          ? ROUND_RULES.roundSeconds
+          : ROUND_RULES.deathmatchSeconds;
+    this.scoreLimit =
+      typeof limit === 'number' && Number.isFinite(limit) && limit >= 1
+        ? Math.floor(limit)
+        : mode === 'defuse'
+          ? ROUND_RULES.roundsToWin
+          : ROUND_RULES.killLimit;
+    this.bombSite = position(options.bombSite ?? BOMB_SITE);
     this.restart();
   }
 
@@ -89,12 +119,17 @@ export class RoundController {
     this.phase = this.mode === 'defuse' ? 'freeze' : 'active';
     this.round = 1;
     this.scores = { alpha: 0, bravo: 0 };
-    this.remaining =
-      this.mode === 'defuse' ? ROUND_RULES.freezeSeconds : ROUND_RULES.deathmatchSeconds;
+    this.seenTeams.clear();
+    this.remaining = this.mode === 'defuse' ? ROUND_RULES.freezeSeconds : this.timeLimit;
     this.winner = null;
     this.winnerId = null;
     this.reason = '';
     this.resetBomb();
+  }
+
+  /** Record an authoritative enemy kill, retaining team points after disconnects. */
+  recordKill(team: Team): void {
+    if (this.mode === 'team-deathmatch' && this.phase === 'active') this.scores[team]++;
   }
 
   snapshot(): RoundSnapshot {
@@ -134,7 +169,7 @@ export class RoundController {
     if (this.phase === 'round-over') {
       this.remaining = Math.max(0, this.remaining - dt);
       if (this.remaining <= EPSILON) {
-        if (this.mode === 'deathmatch') {
+        if (this.mode !== 'defuse') {
           this.phase = 'match-over';
           events.matchEnded = true;
         } else {
@@ -150,25 +185,50 @@ export class RoundController {
       }
       return events;
     }
+    for (const actor of actors) this.seenTeams.add(actor.team);
     this.syncCarrier(actors);
     if (this.phase === 'freeze') {
       this.remaining = Math.max(0, this.remaining - dt);
       if (this.remaining <= EPSILON) {
         this.phase = 'active';
-        this.remaining = ROUND_RULES.roundSeconds;
+        this.remaining = this.timeLimit;
+      }
+      return events;
+    }
+    if (this.mode === 'team-deathmatch') {
+      this.remaining = Math.max(0, this.remaining - dt);
+      if (
+        Math.max(this.scores.alpha, this.scores.bravo) >= this.scoreLimit ||
+        this.remaining <= EPSILON
+      ) {
+        this.winner =
+          this.scores.alpha === this.scores.bravo
+            ? null
+            : this.scores.alpha > this.scores.bravo
+              ? 'alpha'
+              : 'bravo';
+        this.reason =
+          this.winner === null
+            ? 'Empate entre equipes.'
+            : Math.max(this.scores.alpha, this.scores.bravo) >= this.scoreLimit
+              ? 'Limite de eliminações da equipe atingido.'
+              : 'Tempo de partida esgotado.';
+        this.phase = 'round-over';
+        this.remaining = ROUND_RULES.intermissionSeconds;
+        events.roundEnded = true;
       }
       return events;
     }
     if (this.mode === 'deathmatch') {
       this.remaining = Math.max(0, this.remaining - dt);
       const highest = Math.max(0, ...actors.map((actor) => actor.kills));
-      if (highest >= ROUND_RULES.killLimit || this.remaining <= EPSILON) {
+      if (highest >= this.scoreLimit || this.remaining <= EPSILON) {
         const leaders = actors.filter((actor) => actor.kills === highest);
         this.winnerId = leaders.length === 1 ? leaders[0].id : null;
         this.reason =
           leaders.length !== 1
             ? 'Empate.'
-            : highest >= ROUND_RULES.killLimit
+            : highest >= this.scoreLimit
               ? 'Limite de eliminações atingido.'
               : 'Tempo de partida esgotado.';
         this.phase = 'round-over';
@@ -184,13 +244,13 @@ export class RoundController {
     // Never grant an elimination victory merely because a roster is empty.
     if (
       this.bomb?.status !== 'planted' &&
-      alpha.length > 0 &&
+      this.seenTeams.has('alpha') &&
       alpha.every((actor) => actor.health <= 0)
     ) {
       this.endRound('bravo', 'Atacantes eliminados.', events);
       return events;
     }
-    if (bravo.length > 0 && bravo.every((actor) => actor.health <= 0)) {
+    if (this.seenTeams.has('bravo') && bravo.every((actor) => actor.health <= 0)) {
       this.endRound('alpha', 'Defensores eliminados.', events);
       return events;
     }
@@ -248,8 +308,8 @@ export class RoundController {
     if (
       carrier &&
       interactingIds.includes(carrier.id) &&
-      distance(carrier.position, BOMB_SITE) <= ROUND_RULES.siteRadius &&
-      Math.abs(carrier.position.y ?? 0) <= 0.2
+      distance(carrier.position, this.bombSite) <= ROUND_RULES.siteRadius &&
+      Math.abs((carrier.position.y ?? 0) - this.bombSite.y) <= 0.2
     ) {
       if (this.advanceInteraction(carrier, 'plant', dt, ROUND_RULES.plantSeconds)) {
         bomb.status = 'planted';
@@ -265,7 +325,7 @@ export class RoundController {
   private resetBomb(): void {
     this.bomb =
       this.mode === 'defuse'
-        ? { status: 'carried', carrierId: null, position: { ...BOMB_SITE }, remaining: 0 }
+        ? { status: 'carried', carrierId: null, position: { ...this.bombSite }, remaining: 0 }
         : null;
     this.interaction = null;
   }
@@ -312,7 +372,7 @@ export class RoundController {
     this.reason = reason;
     this.scores[winner]++;
     this.interaction = null;
-    this.phase = this.scores[winner] >= ROUND_RULES.roundsToWin ? 'match-over' : 'round-over';
+    this.phase = this.scores[winner] >= this.scoreLimit ? 'match-over' : 'round-over';
     this.remaining = this.phase === 'round-over' ? ROUND_RULES.intermissionSeconds : 0;
     events.roundEnded = true;
     events.matchEnded = this.phase === 'match-over';

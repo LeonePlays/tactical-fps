@@ -68,7 +68,8 @@ describe('authoritative arena', () => {
 });
 
 it('authorizes purchases once per command, denies distant purchases and ignores client money', () => {
-  const m = new Match();
+  // Defuse retains the classic pistol start and buy economy; FFA grants both firearms.
+  const m = new Match('defuse');
   m.add('buyer');
   const initial = m.snapshot()[0];
   expect(initial.weapon).toBe('secondary');

@@ -1,9 +1,10 @@
 import type { RoundSnapshot, Team } from '../game/rounds';
+import type { MatchConfig } from '../game/match-config';
 import type { WeaponState } from '../game/weapons';
 import { SHOP, type BuyItem } from '../game/shop';
 import type { MovementInput, Vec3 } from '../game/physics';
 import type { WeaponSlot } from '../game/ballistics';
-export const PROTOCOL_VERSION = 3 as const;
+export const PROTOCOL_VERSION = 4 as const;
 export interface MatchInput extends MovementInput {
   tool: 'firearm' | 'knife' | 'grenade';
   interact: boolean;
@@ -18,6 +19,10 @@ export interface MatchInput extends MovementInput {
   weapon: WeaponSlot;
 }
 export interface ActorState {
+  name: string;
+  pitch: number;
+  tool: MatchInput['tool'];
+  aiState?: string;
   team: Team;
   grenades: number;
   id: string;
@@ -47,6 +52,9 @@ export interface MatchState {
   room: string;
   self: string;
   actors: ActorState[];
+  config: MatchConfig;
+  matchId: number;
+  hostId?: string;
   rounds: RoundSnapshot;
   grenades: { id: string; owner: string; position: Vec3; remaining: number }[];
 }

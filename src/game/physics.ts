@@ -146,6 +146,14 @@ export class PlayerBody {
     this.position[axis] += amount;
     for (const solid of this.solids) {
       if (!this.overlaps(this.position, solid)) continue;
+      const rise = solid.max.y - this.position.y;
+      if (amount && this.grounded && this.stance !== 'prone' && rise > EPSILON && rise <= 0.3) {
+        const raised = { ...this.position, y: solid.max.y };
+        if (!this.solids.some((obstacle) => this.overlaps(raised, obstacle))) {
+          this.position.y = raised.y;
+          continue;
+        }
+      }
       if (amount > 0) this.position[axis] = solid.min[axis] - RADIUS;
       if (amount < 0) this.position[axis] = solid.max[axis] + RADIUS;
       if (amount !== 0) {

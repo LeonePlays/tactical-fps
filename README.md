@@ -1,41 +1,65 @@
 # TACTICAL FPS
 
-**Beta 0.3 · FPS 3D para navegadores de computador.** Jogue como visitante, sem conta Vercel, ChatGPT ou Supabase. Teclado, mouse e WebGL são necessários; não há versão mobile.
+**Beta 0.4 · FPS 3D para navegadores de computador.** Treino e partidas offline funcionam como visitante, sem conta Vercel, ChatGPT ou Supabase. Requer teclado, mouse e WebGL; não há versão mobile.
 
-A implementação usa TypeScript, Vite e Babylon.js. Movimento, armas, cenários industriais, personagens e áudio são próprios, inspirados nos FPS clássicos. Não é uma reprodução validada 1:1 de CS 1.6. O planejamento GDD 1.4 e `docs/GDD.md` permanecem preservados.
+A fonte existente usa **TypeScript, Vite e Babylon.js**. O motor foi preservado: na inspeção do repositório disponível, a principal era `tactical-fps`; as branches `main` e `opencode-*` citadas no pedido não apareceram entre as branches acessíveis. Nenhum deployment compilado foi usado como substituto da fonte. O planejamento GDD 1.4, `docs/GDD.md` e as pastas existentes permanecem preservados.
 
-![Arena industrial da beta 0.3, visitante com bots e HUD clássico](docs/screenshots/beta-guest-arena.png)
+Cenários, texturas, modelos e áudio são procedurais originais, com direção visual inspirada nos FPS clássicos. Não há assets de Counter-Strike/Combat Online nem reprodução validada 1:1 de suas mecânicas.
+
+![Bairro Antigo: partida TDM real da beta 0.4](docs/screenshots/beta-04-urban.jpg)
 
 ## Jogar
 
-1. Abra o site e clique em **JOGAR AGORA · BOTS**. O padrão é combate livre com três bots.
-2. Quando a arena estiver pronta, clique em **ENTRAR NA PARTIDA** para capturar o mouse.
-3. Humanos começam com pistola, faca, uma granada e $4000. **B → 1** compra a carabina na área inicial.
-4. **ESC** pausa a partida local. Continue, reinicie ou volte ao menu. Ao terminar há resultado e opção de jogar novamente.
+1. Escolha mapa, modo, quantidade de bots, dificuldade, equipe e limites no painel **CRIAR PARTIDA**.
+2. Clique em **CRIAR PARTIDA OFFLINE** ou **JOGAR AGORA · BOTS**.
+3. Quando estiver pronta, clique em **ENTRAR NA PARTIDA** para capturar o mouse.
+4. **ESC** pausa a simulação offline. Continue, reinicie ou volte ao menu. Ao terminar, confira o resultado e use **JOGAR NOVAMENTE**.
 
-Escolha **Bomba** no seletor antes de criar a partida para jogar por equipes. Alpha planta na área A; Bravo impede o plantio ou desarma. **Segure E parado** para interagir. A preparação dura 5 s, a rodada 90 s, o plantio 3 s, o desarme 5 s e a bomba 35 s. Vence quem ganhar três rodadas. Não há reaparecimento durante uma rodada de bomba.
+**INICIAR TREINO** mantém o campo individual do Complexo Ferro: seis alvos retornam após quatro segundos, sem dano recebido. Esse campo é separado dos dois mapas de partida.
 
-Em **Combate livre**, todos são adversários; a partida termina em 10 eliminações ou 3 minutos, com reaparecimento após 3 s. **INICIAR TREINO** abre o Complexo Ferro, com seis alvos que retornam em quatro segundos e sem dano recebido. A arena dos bots é outro cenário industrial, com colisões compartilhadas com o servidor.
+| Modo                     | Regras reais                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Combate livre · FFA      | Todos são adversários; pontuação individual e vencedor por eliminações ou tempo.                               |
+| Combate em equipes · TDM | Alpha contra Bravo; pontos da equipe, proteção entre aliados, reaparecimento e resultado por equipe.           |
+| Bomba                    | Alpha planta na área A e Bravo impede ou desarma. Preparação, rodadas sem reaparecimento e placar de vitórias. |
+
+FFA/TDM usam **180 s e 10 eliminações** por padrão. Na bomba, o padrão é **90 s por rodada e três vitórias**; a preparação dura 5 s, plantio 3 s, desarme 5 s e o pavio 35 s. **Segure E parado** para plantar, recuperar ou desarmar. O menu aceita duração de 30–1800 s e pontuação de 1–100; na bomba esses campos significam tempo por rodada e vitórias necessárias. FFA/TDM reaparecem após 3 s.
+
+FFA/TDM começam com carabina, pistola, faca, uma HE e $4000. Na bomba, humanos começam com pistola e podem comprar a carabina com **B → 1** na área inicial. Reservas são finitas; a compra também oferece munição e colete.
+
+## Mapas e bots
+
+- **Complexo Ferro — industrial:** arena de 32 × 32 m, módulos de carga, coberturas, sinalização e fábrica ao fundo.
+- **Bairro Antigo — urbano:** área de 48 × 48 m, praça, ruas, ruelas, café e mercado acessíveis por várias entradas. Geometria, rotas, iluminação, spawns e objetivo diferem do mapa industrial.
+
+Cada mapa compartilha sua geometria física com navegação e servidor. A escolha carrega outro ambiente, não apenas outro nome ou cor.
+
+Os bots usam grafo de navegação, linha de visão, campo de visão, memória da última posição observada e estados de patrulha, investigação, perseguição, combate, recuo, reagrupamento e objetivo. **Fácil, Normal e Difícil** alteram reação, percepção, giro, erro de mira, cadência e controle do recuo. Cooperação utiliza posições conhecidas de aliados; inimigos ocultos não fornecem posição atual à IA. A aparência identifica Alpha em azul e Bravo em tons de ferrugem nos modos por equipe.
 
 ## Controles
 
-| Entrada         | Ação                                     |
-| --------------- | ---------------------------------------- |
-| Mouse / WASD    | Mirar / correr                           |
-| Shift           | Andar silenciosamente                    |
-| Ctrl / Z        | Alternar agachado / deitado              |
-| Espaço          | Saltar; indisponível deitado             |
-| Clique esquerdo | Atirar, golpear ou lançar granada        |
-| 1 / 2           | Primária / secundária                    |
-| 3 / 4           | Faca / granada HE                        |
-| R               | Recarregar com reserva finita            |
-| B, depois 1–6   | Comprar arma, munição, colete ou granada |
-| E (segurar)     | Plantar, recuperar ou desarmar bomba     |
-| ESC             | Liberar mouse / pausar                   |
+| Entrada         | Ação                                                    |
+| --------------- | ------------------------------------------------------- |
+| Mouse / WASD    | Mirar / correr                                          |
+| Shift           | Andar silenciosamente                                   |
+| Ctrl / Z        | Alternar agachado / deitado                             |
+| Espaço          | Saltar; indisponível deitado                            |
+| Clique esquerdo | Atirar, golpear ou lançar HE                            |
+| 1 / 2           | Primária / secundária                                   |
+| 3 / 4           | Faca / granada HE                                       |
+| R               | Recarregar com reserva finita                           |
+| B, depois 1–6   | Comprar arma, munição, colete ou granada                |
+| E (segurar)     | Plantar, recuperar ou desarmar bomba                    |
+| Tab (segurar)   | Placar com jogadores, bots, equipes e resultados atuais |
+| ESC             | Liberar mouse / pausar                                  |
 
-Há aceleração, atrito, counter-strafing, controle aéreo, colisões por postura, spray determinístico, dispersão por movimento, tempo de troca de armas e impacto nas paredes. A carabina usa 30/90 e a pistola 12/100. Faca tem alcance limitado; granadas colidem, ricocheteiam e causam dano com queda por distância e oclusão das paredes. Equipes não causam dano entre aliados no modo bomba; a própria granada pode ferir quem a lançou.
+Movimento inclui aceleração, atrito, counter-strafing, controle aéreo, posturas, colisões e subida de degraus baixos de até 0,30 m. Armas têm recuo, dispersão por movimento, tempo de troca, recarga e impactos. A HE ricocheteia e causa dano com queda por distância e oclusão das paredes; pode ferir quem a lançou.
 
-Bots percebem apenas adversários visíveis, reagem com atraso, contornam obstáculos e seguem o objetivo. Personagens articulados têm postura e caminhada; no modo bomba Alpha usa azul e Bravo laranja. Não há dificuldade selecionável nem animação de qualidade final.
+## Ajustes e perfil
+
+Sensibilidade, FOV, volume geral, efeitos, música ambiente do menu, qualidade, escala de resolução, sombras, inversão vertical, mira dinâmica e FPS são configuráveis. Tela cheia depende do suporte/permissão do navegador. Opções de escala e sombras alteram o renderer; não há promessa de 60 FPS em hardware não medido.
+
+Ajustes, configuração da partida, nome de visitante e último resultado são guardados no navegador quando o armazenamento está disponível. O perfil local não cria uma conta e não migra dados entre computadores. HUD, notificações e resultado derivam do estado da partida; não há servidores ou jogadores humanos simulados na lista online.
 
 ## Executar e verificar
 
@@ -46,7 +70,7 @@ npm ci
 npm run dev
 ```
 
-Abra o endereço do Vite. A captura do ponteiro exige clique e origem segura (HTTPS ou localhost). Não abra `dist/index.html` com `file://`.
+Abra o endereço exibido pelo Vite. A captura do ponteiro exige clique e origem segura (HTTPS ou localhost). Não abra `dist/index.html` com `file://`.
 
 ```bash
 npm run format:check
@@ -55,37 +79,35 @@ npm run build
 npm run preview
 ```
 
-Testes funcionais, após o build:
+Testes de navegador, após o build:
 
 ```bash
 npx playwright install chromium
 npm run test:e2e
-# Ou, com Chromium já instalado no Linux:
+# Ou com Chromium já instalado no Linux:
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e
 ```
 
-Os testes visitantes usam contexto novo, sem conta ou simulação de autenticação, com Supabase bloqueado. Também há testes de contas com Auth simulado e salas com dois navegadores/servidor isolado; estes não validam o serviço de contas real. Nenhum dado ou credencial de teste habilita autenticação falsa no servidor de produção.
+A suíte cobre física, mapas, navegação, dificuldades, armas, regras, configuração e protocolo. Os testes visitantes usam contexto novo sem autenticação simulada e bloqueiam Supabase. Testes de conta e salas têm fixtures isoladas; não comprovam o serviço de contas real. Consulte [o relatório de verificação](docs/QA-0.4.md) para os comandos executados, resultados e limites.
 
-## Contas e dados
+## Contas e multiplayer
 
-**Treino e bots não dependem de login nem de serviços externos.** Ajustes, último treino e último resultado são salvos neste navegador quando o armazenamento está disponível. No modo visitante os dados não migram entre computadores. Não há retomada da posição ou histórico completo de partidas.
+**Treino e bots são independentes de login e serviços externos.** **ENTRAR / CADASTRAR** é opcional para o jogo local. A conta real usa Supabase; cadastro solicita e-mail, username e senha e retorna a LOGAR. Sessão persistente e salvamento online dependem desse serviço.
 
-**ENTRAR / CADASTRAR** abre o acesso opcional à conta. Cadastro usa e-mail, username (3–20 letras, números ou _) e senha de ao menos 8 caracteres e retorna a LOGAR. A sessão é persistida pelo SDK Supabase; guardar senha no Google Password Manager depende do navegador e não equivale a login com Google. Ajustes e resumos de usuários conectados são salvos nos metadados da conta e não servem para ranking competitivo.
+No último diagnóstico registrado, em **10/11/2026**, `rrxwarhfizeuhowqpzle.supabase.co` retornava **NXDOMAIN**. O código não restaura esse projeto: cadastro/login real exige projeto ativo e configuração correta. Veja [contas e diagnóstico](supabase/README.md) para URL/chave publicável, confirmação de e-mail e função de username. Nunca coloque chave administrativa em variáveis `VITE_`.
 
-**Pendência externa verificada em 10/11/2026:** o domínio do projeto Supabase fornecido (`rrxwarhfizeuhowqpzle.supabase.co`) retorna NXDOMAIN. Cadastro e login reais precisam de um projeto Supabase ativo. A chave publicável não permite restaurar o projeto nem desligar confirmação de e-mail. Veja [configuração e diagnóstico das contas](supabase/README.md) para atualizar URL/chave na Vercel, desativar confirmação e instalar login por username. O jogo local continua acessível durante essa indisponibilidade.
+**ENCONTRAR SERVIDORES** consulta `/rooms` do servidor informado e permite criar/entrar por código. É uma lista real das salas desse processo, não matchmaking público. Salas entre jogadores exigem conta válida e um servidor Node/WebSocket separado; até oito participantes incluindo bots. O anfitrião pode reiniciar a sala, e a função de anfitrião passa a outro humano conectado quando ele sai. [Execução, LAN e publicação do servidor](server/README.md).
 
-## Publicar
+Frontend e servidor usam **protocolo 4** e devem ser atualizados juntos. O servidor está preparado para execução local e publicação posterior; a Vercel estática não hospeda esse processo.
 
-A Vercel publica o frontend estático; `vercel.json` já define Vite, `npm run build` e `dist`. Conecte este repositório, use Node.js 22 ou 24 e desative Deployment Protection para o endereço compartilhado. Confira em janela anônima. A publicação do frontend não exige login dos jogadores na Vercel ou no ChatGPT.
+## Publicar e manter
 
-Variáveis opcionais: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` e `VITE_MATCH_SERVER_URL`. Use somente chave publicável em `VITE_`; nunca uma chave administrativa.
+`vercel.json` define preset Vite, `npm run build` e saída `dist`. Use Node.js 22 ou 24. O endereço compartilhado precisa estar publicamente acessível; confirme em janela anônima. Nenhuma conta Vercel ou ChatGPT é necessária para jogar.
 
-**Salas entre jogadores** exigem conta real e um processo WebSocket separado. O menu **MULTIPLAYER · SERVIDOR PRÓPRIO** permite criar/entrar por código e misturar jogadores e bots, até oito participantes. O servidor está preparado para execução local e publicação posterior, conforme solicitado. O preview Vercel sozinho não hospeda partidas multiplayer. Consulte [servidor: execução, LAN e publicação](server/README.md). Frontend e servidor usam **protocolo 3** e devem ser atualizados juntos.
+Variáveis opcionais: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` e `VITE_MATCH_SERVER_URL`. Use somente chave publicável no frontend. Publicar o frontend não publica automaticamente o servidor ou configura Supabase.
 
-## Organização e limites da beta
+Os módulos ficam em `src/game/` (simulação, mapas, IA e renderização), `src/network/` (protocolo e transportes), `src/ui/` (interface e apresentação), `src/core/` (relógio e ajustes) e `src/auth/`. `server/`, `public/assets/`, `docs/` e `tests/` foram preservados. Consulte [arquitetura](docs/ARCHITECTURE.md), [histórico](docs/CHANGELOG.md), [próximas etapas](docs/NEXT-STEPS.md) e [contribuição](docs/CONTRIBUTING.md).
 
-`src/game/` contém física, armas, equipamentos, navegação, atores, regras de rodada e renderização; `src/network/` compartilha arena/protocolo e transporte local/WebSocket; `src/auth/`, `src/ui/` e `src/core/` cuidam de contas, interface e ajustes. As pastas `server/`, `public/assets/`, `docs/` e `tests/` permanecem preservadas. Veja [arquitetura](docs/ARCHITECTURE.md), [parâmetros do movimento clássico](docs/CLASSIC-FEEL.md) e [contribuição](docs/CONTRIBUTING.md).
+Campanha narrativa, porto, matchmaking público, ranking validado, chat/voz e reconexão com placar continuam planejados. Multiplayer ainda requer hospedagem, testes de carga e refinamento de latência antes de competição pública. Esta beta não promete ausência absoluta de bugs.
 
-Esta beta fecha o ciclo de treino e partidas locais. Campanha narrativa, mapas urbano/porto, matchmaking público, ranking, chat/voz, reconexão com placar e assets/animações finais continuam no planejamento. O multiplayer tem autoridade de movimento/dano/inventário, mas ainda requer hospedagem, validação de carga e melhorias de latência antes de competição pública. Não há promessa de ausência absoluta de bugs.
-
-Copyright © 2026 LeonePlays. **All Rights Reserved — Proprietary Software.** Consulte [LICENSE.md](LICENSE.md). Dependências têm suas respectivas licenças.
+Copyright © 2026 LeonePlays. **All Rights Reserved — Proprietary Software.** Consulte [LICENSE.md](LICENSE.md). Dependências preservam suas licenças; Babylon.js é Apache-2.0, e Vite, Supabase JS e ws usam MIT.

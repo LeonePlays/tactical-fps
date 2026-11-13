@@ -3,6 +3,64 @@ import { randomBytes } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Match } from './match';
 import { PROTOCOL_VERSION, parseInput } from '../src/network/protocol';
+import {
+  normalizeMatchConfig,
+  playerName,
+  type MatchConfig,
+  type TeamPreference,
+} from '../src/game/match-config';
+
+/** Browser settings may be forgiving; a network host must reject malformed options. */
+function strictConfig(value: unknown): Partial<MatchConfig> {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('Configuração de partida inválida.');
+  const raw = value as Record<string, unknown>;
+  const enums = {
+    mode: ['deathmatch', 'team-deathmatch', 'defuse'],
+    map: ['industrial', 'old-quarter'],
+    difficulty: ['easy', 'normal', 'hard'],
+    team: ['auto', 'alpha', 'bravo'],
+  };
+  const ranges = { bots: [0, 4], timeLimit: [30, 1800], scoreLimit: [1, 100] };
+  for (const [key, item] of Object.entries(raw)) {
+    if (Object.hasOwn(enums, key)) {
+      if (typeof item !== 'string' || !enums[key as keyof typeof enums].includes(item))
+        throw new Error(`Opção de partida inválida: ${key}.`);
+    } else if (Object.hasOwn(ranges, key)) {
+      const [min, max] = ranges[key as keyof typeof ranges];
+      if (typeof item !== 'number' || !Number.isInteger(item) || item < min || item > max)
+        throw new Error(`Limite de partida inválido: ${key}.`);
+    } else throw new Error(`Opção de partida desconhecida: ${key}.`);
+  }
+  return raw as Partial<MatchConfig>;
+}
+
+function joinOptions(data: Record<string, unknown>) {
+  const raw = strictConfig(data.config);
+  const legacy = strictConfig({
+    ...(data.bots === undefined ? {} : { bots: data.bots }),
+    ...(data.mode === undefined ? {} : { mode: data.mode }),
+    ...(data.team === undefined ? {} : { team: data.team }),
+  });
+  for (const key of ['bots', 'mode', 'team'] as const)
+    if (raw[key] !== undefined && legacy[key] !== undefined && raw[key] !== legacy[key])
+      throw new Error(`Opções de partida conflitantes: ${key}.`);
+  if (data.name !== undefined && (typeof data.name !== 'string' || data.name.length > 80))
+    throw new Error('Nome de jogador inválido.');
+  const combined = { ...legacy, ...raw };
+  const config = normalizeMatchConfig(combined);
+  // Preserve the original bomb rules when a legacy/partial request omits limits.
+  if (config.mode === 'defuse') {
+    if (combined.timeLimit === undefined) config.timeLimit = 90;
+    if (combined.scoreLimit === undefined) config.scoreLimit = 3;
+  }
+  return {
+    config,
+    team: (legacy.team ?? raw.team ?? 'auto') as TeamPreference,
+    name: playerName(data.name, 'Jogador'),
+  };
+}
 export type Verify = (token: string) => Promise<string | null>;
 export const verifySupabase: Verify = async (token) => {
   try {
@@ -30,10 +88,50 @@ export function createMatchServer(
   origins = ['http://localhost:5173', 'http://127.0.0.1:5173'],
 ) {
   const rooms = new Map<string, Match>();
+  const hosts = new Map<string, string>();
   const http = createServer((req, res) => {
+    const origin = req.headers.origin;
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Cache-Control', 'no-store');
+    if (origin && !origins.includes(origin)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Origem não permitida.' }));
+      return;
+    }
+    if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, OPTIONS' });
+      res.end();
+      return;
+    }
+    if (req.method !== 'GET') {
+      res.writeHead(405, { Allow: 'GET, OPTIONS' });
+      res.end();
+      return;
+    }
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, rooms: rooms.size }));
+    } else if (req.url === '/rooms') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          protocol: PROTOCOL_VERSION,
+          rooms: [...rooms].map(([code, match]) => {
+            const actors = match.snapshot();
+            return {
+              code,
+              mode: match.config.mode,
+              map: match.config.map,
+              difficulty: match.config.difficulty,
+              players: actors.filter((actor) => !actor.bot).length,
+              bots: actors.filter((actor) => actor.bot).length,
+              capacity: 8,
+              phase: match.state().rounds.phase,
+            };
+          }),
+        }),
+      );
     } else {
       res.writeHead(404);
       res.end();
@@ -50,6 +148,27 @@ export function createMatchServer(
     WebSocket,
     { id: string; room: string; last: number; count: number; window: number }
   >();
+  const snapshot = (room: string, id: string) => {
+    const match = rooms.get(room)!;
+    return {
+      protocol: PROTOCOL_VERSION,
+      type: 'state',
+      room,
+      self: id,
+      hostId: hosts.get(room),
+      actors: match.snapshot(),
+      ...match.state(),
+    };
+  };
+  const broadcast = (room: string) => {
+    for (const [client, info] of clients)
+      if (
+        info.room === room &&
+        client.readyState === WebSocket.OPEN &&
+        client.bufferedAmount < 65536
+      )
+        client.send(JSON.stringify(snapshot(room, info.id)));
+  };
   wss.on('connection', (ws) => {
     connectionCount++;
     let authenticating = false;
@@ -58,6 +177,8 @@ export function createMatchServer(
     ws.on('message', async (raw) => {
       try {
         const data = JSON.parse(raw.toString());
+        if (!data || typeof data !== 'object' || Array.isArray(data))
+          throw new Error('Mensagem inválida.');
         const joined = clients.get(ws);
         if (joined) {
           if (Date.now() - joined.window > 1000) {
@@ -69,6 +190,20 @@ export function createMatchServer(
             return;
           }
           joined.last = Date.now();
+          if (data.type === 'restart') {
+            if (hosts.get(joined.room) !== joined.id) {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'Somente o anfitrião pode reiniciar a partida.',
+                }),
+              );
+              return;
+            }
+            rooms.get(joined.room)?.restart();
+            broadcast(joined.room);
+            return;
+          }
           const input = parseInput(data.input);
           if (data.type === 'input' && input) rooms.get(joined.room)?.input(joined.id, input);
           return;
@@ -78,6 +213,9 @@ export function createMatchServer(
           throw new Error('Versão incompatível. Atualize o jogo e o servidor.');
         if (data.type !== 'join' || typeof data.token !== 'string' || data.token.length > 4096)
           throw new Error('Conexão inválida.');
+        if (data.create !== undefined && typeof data.create !== 'boolean')
+          throw new Error('Escolha de sala inválida.');
+        const options = joinOptions(data);
         authenticating = true;
         lastToken = data.token;
         if (clients.size >= 128) throw new Error('Servidor cheio.');
@@ -89,17 +227,15 @@ export function createMatchServer(
         let room: string, match: Match;
         if (data.create === true) {
           if (rooms.size >= 16) throw new Error('Limite de salas atingido.');
-          if (!Number.isInteger(data.bots) || data.bots < 0 || data.bots > 4)
-            throw new Error('Escolha de zero a quatro bots.');
           do {
             room = randomBytes(3).toString('hex').toUpperCase();
           } while (rooms.has(room));
-          if (data.mode !== undefined && !['deathmatch', 'defuse'].includes(data.mode))
-            throw new Error('Modo inválido.');
-          match = new Match(data.mode ?? 'deathmatch');
-          match.add(id);
-          for (let i = 0; i < data.bots; i++) match.add(`bot-${i}`, true);
+          match = new Match(options.config);
+          match.add(id, false, options.team, options.name);
+          for (let i = 0; i < options.config.bots; i++)
+            match.add(`bot-${i}`, true, 'auto', `BOT ${i + 1}`);
           rooms.set(room, match);
+          hosts.set(room, id);
         } else {
           if (typeof data.room !== 'string' || !/^[0-9A-F]{6}$/.test(data.room))
             throw new Error('Código de sala inválido.');
@@ -107,20 +243,11 @@ export function createMatchServer(
           const existing = rooms.get(room);
           if (!existing) throw new Error('Sala não encontrada.');
           match = existing;
-          match.add(id);
+          match.add(id, false, options.team, options.name);
         }
         clearTimeout(timeout);
         clients.set(ws, { id, room, last: Date.now(), count: 0, window: Date.now() });
-        ws.send(
-          JSON.stringify({
-            protocol: PROTOCOL_VERSION,
-            type: 'state',
-            room,
-            self: id,
-            actors: match.snapshot(),
-            ...match.state(),
-          }),
-        );
+        ws.send(JSON.stringify(snapshot(room, id)));
       } catch (error) {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(
@@ -151,7 +278,13 @@ export function createMatchServer(
       clients.delete(ws);
       const match = rooms.get(c.room);
       match?.actors.delete(c.id);
-      if (match && ![...match.actors.values()].some((a) => !a.bot)) rooms.delete(c.room);
+      if (match && ![...match.actors.values()].some((a) => !a.bot)) {
+        rooms.delete(c.room);
+        hosts.delete(c.room);
+      } else if (match && hosts.get(c.room) === c.id) {
+        hosts.set(c.room, [...match.actors.values()].find((actor) => !actor.bot)!.id);
+        broadcast(c.room);
+      }
     });
   });
   const tick = setInterval(() => {
@@ -162,16 +295,7 @@ export function createMatchServer(
         continue;
       }
       if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 65536)
-        ws.send(
-          JSON.stringify({
-            protocol: PROTOCOL_VERSION,
-            type: 'state',
-            room: c.room,
-            self: c.id,
-            actors: rooms.get(c.room)?.snapshot() || [],
-            ...rooms.get(c.room)!.state(),
-          }),
-        );
+        ws.send(JSON.stringify(snapshot(c.room, c.id)));
     }
   }, 50);
   return {

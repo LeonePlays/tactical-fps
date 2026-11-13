@@ -1,3 +1,4 @@
+import { syncCapturedMouse } from './actions';
 import { accountFixture } from './account-fixture';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -30,6 +31,7 @@ async function hold(page: Page, key: string, milliseconds = 650) {
 }
 async function start(page: Page) {
   await page.locator('#start-button').click();
+  await syncCapturedMouse(page);
   await expect(page.locator('#hud')).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('game-canvas');
 }
@@ -80,7 +82,12 @@ test('WebGL scene is playable: pointer lock, targets, WASD, Shift walking, stanc
   const remaining = Number(await page.locator('#ammo-count').textContent());
   expect(remaining).toBeGreaterThanOrEqual(0);
   expect(remaining).toBeLessThan(30);
-  await expect(page.locator('#hit-count')).toHaveText('01');
+  // An automatic native down/up may hit multiple aligned targets on a slow runner.
+  await expect
+    .poll(async () => Number(await page.locator('#hit-count').textContent()))
+    .toBeGreaterThan(0);
+  const hits = Number(await page.locator('#hit-count').textContent());
+  expect(hits).toBeLessThanOrEqual(Math.min(6, 30 - remaining));
   await page.keyboard.press('r');
   await expect(page.locator('#reload-label')).toHaveText('RECARREGANDO…');
   await expect(page.locator('#ammo-count')).toHaveText('30');
@@ -106,7 +113,7 @@ test('WebGL scene is playable: pointer lock, targets, WASD, Shift walking, stanc
   await page.keyboard.up('Space');
   await expect(page.locator('#hud')).toHaveAttribute('data-grounded', 'true');
   const originalBearing = await page.locator('#bearing').textContent();
-  await page.mouse.move(900, 450);
+  await page.mouse.move(900, 450, { steps: 6 });
   await expect(page.locator('#bearing')).not.toHaveText(originalBearing!);
   await page.keyboard.press('Escape');
   await expect(page.locator('#pause-overlay')).toBeVisible();
@@ -128,6 +135,7 @@ test('WebGL scene is playable: pointer lock, targets, WASD, Shift walking, stanc
 
 test('map geometry blocks forward movement at the south gate', async ({ page }) => {
   await start(page);
+  await expect(page.locator('#bearing')).toHaveText('000°');
   await page.keyboard.down('s');
   await expect.poll(async () => (await position(page)).z, { timeout: 25_000 }).toBeLessThan(-29.94);
   await page.keyboard.up('s');
