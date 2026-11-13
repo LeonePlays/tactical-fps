@@ -1,5 +1,7 @@
 import { createActor, type ActorModel } from './actors';
-import type { MatchInput, MatchState } from '../network/protocol';
+import type { MatchInput, MatchState, DroppedItemState } from '../network/protocol';
+import { createBombView } from './bomb-view';
+import { SpotLight } from '@babylonjs/core/Lights/spotLight';
 import { seedFor, shotDirection, spreadFor, type WeaponSlot } from './ballistics';
 import {
   EquipmentInventory,
@@ -8,8 +10,13 @@ import {
   stepGrenade,
   type GrenadeProjectile,
 } from './equipment';
-import { createEquipmentView } from './equipment-view';
-import { BOMB_SITE, ROUND_RULES } from './rounds';
+import { createEquipmentView, animateEquipmentView } from './equipment-view';
+import { ROUND_RULES } from './rounds';
+import { getMap } from './maps';
+import type { MapId } from './match-config';
+import { FixedStepClock } from '../core/fixed-step';
+import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { WeaponController } from './weapons';
 import { buy, SHOP, type BuyItem } from './shop';
 import { ImpactPool } from './impacts';
@@ -25,12 +32,35 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { GameAudio } from './audio';
-import { PlayerBody, type Stance, type Vec3 } from './physics';
+import { PlayerBody, type Stance, type Vec3, type Solid } from './physics';
+import { rayBox } from '../network/arena';
+const canHearPosition = (solids: readonly Solid[], from: Vec3, to: Vec3) => {
+  const d = Math.hypot(to.x - from.x, to.z - from.z);
+  return (
+    d < 0.01 ||
+    !solids.some(
+      (s) =>
+        rayBox(
+          { x: from.x, y: from.y + 1, z: from.z },
+          { x: (to.x - from.x) / d, y: 0, z: (to.z - from.z) / d },
+          s,
+        ) <
+        d - 0.1,
+    )
+  );
+};
 import { createWorld, getTargetId, type World } from './world';
-import { createWeapon } from './weapon';
+import { createWeapon, animateWeapon } from './weapon';
 import type { Settings } from '../core/settings';
 
 export interface GameSnapshot {
+  aiming: boolean;
+  flashlight: boolean;
+  equipmentSlot: number;
+  equippedOwned: boolean;
+  renderScale: number;
+  shadows: boolean;
+  map: MapId;
   tool: MatchInput['tool'];
   grenades: number;
   weapon: WeaponSlot;
@@ -66,6 +96,8 @@ export interface GameEvents {
   onLockChange(locked: boolean): void;
   onSnapshot(snapshot: GameSnapshot): void;
   onInput?(input: MatchInput): void;
+  onTick?(dt: number): void;
+  onScoreboard?(visible: boolean): void;
 }
 
 export class Game {
@@ -73,8 +105,29 @@ export class Game {
   private readonly scene: Scene;
   private readonly camera: UniversalCamera;
   private readonly menuCamera: UniversalCamera;
+  private readonly flashlight: SpotLight;
+  private flashlightOn = false;
+  private aimHeld = false;
+  private aimBlend = 0;
+  private grenadeSlot: 0 | 1 = 0;
+  private hasBomb = false;
+  private dropSequence = 0;
+  private readonly droppedMeshes = new Map<string, TransformNode>();
+  private trainingDrops: DroppedItemState[] = [];
   private readonly world: World;
   private weapon: TransformNode;
+  private weaponMeshes: AbstractMesh[] = [];
+  private muzzleFlash?: AbstractMesh;
+  private readonly clock = new FixedStepClock();
+  private previousPosition: Vec3 | undefined;
+  private renderAlpha = 1;
+  private matchId = 0;
+  private readonly cameraCorrection = new Vector3();
+  private readonly remoteAudio = new Map<
+    string,
+    { shots: number; footsteps: number; position: Vec3 }
+  >();
+  private damageUntil = 0;
   private gun = new WeaponController();
   private tool: MatchInput['tool'] = 'firearm';
   private readonly equipment = new EquipmentInventory();
@@ -117,6 +170,7 @@ export class Game {
   private readonly keys = new Set<string>();
   private readonly listeners = new AbortController();
   private active = false;
+  private discardFirstMouseMove = false;
   private requestedStance: Stance = 'standing';
   private yaw = 0;
   private pitch = 0;
@@ -128,18 +182,21 @@ export class Game {
   private recoil = 0;
   private hudTimer = 0;
   private hasStarted = false;
+  private disposed = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     settings: Settings,
     private readonly events: GameEvents,
     private readonly online = false,
+    private readonly mapId: MapId = 'industrial',
+    private readonly localMatch = false,
   ) {
     this.settings = { ...settings };
     this.engine = new Engine(
       canvas,
       false,
-      { stencil: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' },
+      { stencil: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' },
       false,
     );
     this.scene = new Scene(this.engine);
@@ -149,16 +206,30 @@ export class Game {
     this.camera.minZ = 0.04;
     this.camera.maxZ = 180;
     this.camera.fovMode = Camera.FOVMODE_HORIZONTAL_FIXED;
+    this.flashlight = new SpotLight(
+      'player-flashlight',
+      Vector3.Zero(),
+      new Vector3(0, 0, 1),
+      Math.PI / 4,
+      12,
+      this.scene,
+    );
+    this.flashlight.parent = this.camera;
+    this.flashlight.diffuse = new Color3(1, 0.97, 0.86);
+    this.flashlight.intensity = 3;
+    this.flashlight.range = 24;
+    this.flashlight.setEnabled(false);
     this.menuCamera = new UniversalCamera('menu-camera', new Vector3(29, 18, -32), this.scene);
     this.menuCamera.inputs.clear();
     this.menuCamera.minZ = 0.1;
     this.menuCamera.maxZ = 200;
     this.menuCamera.fov = 0.95;
     this.menuCamera.setTarget(new Vector3(-1, 2, 5));
-    this.world = createWorld(this.scene, online);
+    this.world = createWorld(this.scene, online, this.mapId);
     this.body = new PlayerBody(this.world.solids, this.world.spawn);
     this.impacts = new ImpactPool(this.scene);
     this.weapon = createWeapon(this.scene, this.camera);
+    this.cacheWeaponMeshes();
     this.weapon.setEnabled(false);
     this.scene.activeCamera = this.menuCamera;
     this.scene.setRenderingAutoClearDepthStencil(1, true, true, true);
@@ -176,8 +247,14 @@ export class Game {
         this.active = document.pointerLockElement === this.canvas;
         this.keys.clear();
         this.trigger = false;
+        this.aimHeld = false;
         this.buying = false;
+        this.clock.reset();
+        this.events.onScoreboard?.(false);
+        this.audio.setMenu(!this.active);
         if (this.active) {
+          // Some browsers warp the cursor when capturing it. Never turn the camera from that delta.
+          this.discardFirstMouseMove = true;
           this.hasStarted = true;
           this.scene.activeCamera = this.camera;
           this.weapon.setEnabled(true);
@@ -191,6 +268,10 @@ export class Game {
       'mousemove',
       (event) => {
         if (!this.active) return;
+        if (this.discardFirstMouseMove) {
+          this.discardFirstMouseMove = false;
+          return;
+        }
         const sensitivity = this.settings.sensitivity * 0.0018;
         this.yaw += event.movementX * sensitivity;
         this.pitch += event.movementY * sensitivity * (this.settings.invertY ? -1 : 1);
@@ -218,11 +299,25 @@ export class Game {
             'ControlLeft',
             'ControlRight',
             'KeyZ',
+            'KeyC',
             'KeyR',
+            'KeyE',
+            'KeyF',
+            'KeyQ',
+            'Digit1',
+            'Digit2',
+            'Digit3',
+            'Digit4',
+            'Digit5',
+            'Digit6',
             'Tab',
           ].includes(event.code)
         )
           event.preventDefault();
+        if (event.code === 'Tab') {
+          this.events.onScoreboard?.(true);
+          return;
+        }
         if (event.code === 'KeyB' && !event.repeat) {
           event.preventDefault();
           this.buying = !this.buying;
@@ -240,7 +335,7 @@ export class Game {
         }
         this.keys.add(event.code);
         if (event.repeat) return;
-        if (event.code === 'ControlLeft' || event.code === 'ControlRight')
+        if (event.code === 'KeyC')
           this.requestedStance = this.requestedStance === 'crouching' ? 'standing' : 'crouching';
         if (event.code === 'KeyZ')
           this.requestedStance = this.requestedStance === 'prone' ? 'standing' : 'prone';
@@ -251,15 +346,31 @@ export class Game {
         if (event.code === 'Digit1') this.switchWeapon('primary');
         if (event.code === 'Digit2') this.switchWeapon('secondary');
         if (event.code === 'Digit3') this.switchTool('knife');
-        if (event.code === 'Digit4') this.switchTool('grenade');
+        if (event.code === 'Digit4') this.selectEquipment(4);
+        if (event.code === 'Digit5') this.selectEquipment(5);
+        if (event.code === 'Digit6') this.selectEquipment(6);
+        if (event.code === 'KeyF') this.flashlightOn = !this.flashlightOn;
+        if (event.code === 'KeyQ') this.dropEquipment();
+        if (event.code === 'KeyE' && !this.online) this.pickupTrainingItem();
       },
       options,
     );
-    window.addEventListener('keyup', (event) => this.keys.delete(event.code), options);
+    window.addEventListener(
+      'keyup',
+      (event) => {
+        this.keys.delete(event.code);
+        if (event.code === 'Tab') this.events.onScoreboard?.(false);
+      },
+      options,
+    );
     this.canvas.addEventListener(
       'mousedown',
       (event) => {
         if (!this.active) return;
+        if (event.button === 2 && !this.buying && this.tool === 'firearm') {
+          this.aimHeld = true;
+          return;
+        }
         if (event.button === 0) {
           if (this.buying) return;
           this.trigger = true;
@@ -271,12 +382,26 @@ export class Game {
     );
     window.addEventListener(
       'mouseup',
-      () => {
-        this.trigger = false;
+      (event) => {
+        if (event.button === 0) this.trigger = false;
+        if (event.button === 2) this.aimHeld = false;
       },
       options,
     );
     this.canvas.addEventListener('contextmenu', (event) => event.preventDefault(), options);
+    this.canvas.addEventListener(
+      'wheel',
+      (event) => {
+        if (!this.active || this.buying || !event.deltaY) return;
+        event.preventDefault();
+        const slots = this.availableEquipment();
+        const index = slots.indexOf(this.equipmentSlot);
+        this.selectEquipment(
+          slots[(index + (event.deltaY > 0 ? 1 : -1) + slots.length) % slots.length],
+        );
+      },
+      { ...options, passive: false },
+    );
     window.addEventListener('blur', () => this.pause(), options);
     document.addEventListener(
       'visibilitychange',
@@ -327,8 +452,11 @@ export class Game {
   }
 
   pause(): void {
+    this.clock.reset();
+    this.events.onScoreboard?.(false);
     this.keys.clear();
     this.trigger = false;
+    this.aimHeld = false;
     this.buying = false;
     if (document.pointerLockElement === this.canvas) document.exitPointerLock();
   }
@@ -340,8 +468,12 @@ export class Game {
     this.yaw = 0;
     this.pitch = 0;
     this.elapsed = 0;
+    this.previousPosition = undefined;
+    this.cameraCorrection.setAll(0);
     this.gun = new WeaponController();
     this.equipment.reset(this.fireSequence);
+    this.trainingDrops = [];
+    this.syncDroppedItems([]);
     this.tool = 'firearm';
     this.toolReady = 0;
     this.targetHealth.clear();
@@ -397,16 +529,17 @@ export class Game {
   }
 
   private useEquipment(): void {
+    if (this.tool === 'bomb') return;
     const origin = {
-      x: this.camera.position.x,
-      y: this.camera.position.y,
-      z: this.camera.position.z,
+      x: this.body.position.x,
+      y: this.body.position.y + this.body.eyeHeight,
+      z: this.body.position.z,
     };
     const direction = shotDirection(this.yaw, this.pitch, 0, 0);
     if (this.tool === 'knife') {
       if (!this.equipment.swing(this.elapsed, this.fireSequence)) return;
       this.recoil = 1;
-      this.audio.play('impact');
+      this.audio.play('knife');
       if (!this.online) {
         const target = meleeTarget(origin, direction, this.world.solids, this.trainingTargets());
         if (target !== null) this.damageTrainingTarget(target, 45);
@@ -418,10 +551,11 @@ export class Game {
         origin,
         direction,
         this.world.solids,
+        this.grenadeSlot,
       );
       if (!grenade) return;
       this.recoil = 1;
-      this.audio.play('reload');
+      this.audio.play('throw');
       if (!this.online)
         this.trainingGrenades.push({
           projectile: grenade,
@@ -466,8 +600,7 @@ export class Game {
     mesh.scaling.setAll(0.15);
     mesh.isPickable = false;
     this.explosions.push({ mesh, age: 0, radius });
-    this.audio.play('shot');
-    this.audio.play('land');
+    this.audio.play('explosion');
   }
 
   private updateEffects(dt: number): void {
@@ -520,7 +653,8 @@ export class Game {
         { diameter: ROUND_RULES.siteRadius * 2, thickness: 0.09, tessellation: 48 },
         this.scene,
       );
-      this.bombSite.position.set(BOMB_SITE.x, BOMB_SITE.y + 0.06, BOMB_SITE.z);
+      const site = getMap(this.mapId).bombSite;
+      this.bombSite.position.set(site.x, site.y + 0.06, site.z);
       const material = this.effectMaterial('bomb-site-yellow', '#e0b951');
       material.emissiveColor = Color3.FromHexString('#826421');
       this.bombSite.material = material;
@@ -567,12 +701,161 @@ export class Game {
   applySettings(settings: Settings): void {
     this.settings = { ...settings };
     this.camera.fov = (settings.fov * Math.PI) / 180;
-    this.audio.volume = settings.volume;
-    this.scene.shadowsEnabled = settings.quality === 'high';
-    this.engine.setHardwareScalingLevel(
-      settings.quality === 'low' ? 1.5 : 1 / Math.min(window.devicePixelRatio || 1, 1.5),
-    );
+    this.audio.setMix(settings.volume, settings.effectsVolume, settings.musicVolume);
+    this.scene.shadowsEnabled = settings.shadows !== 'off';
+    this.world.shadows.filteringQuality =
+      settings.shadows === 'high' ? ShadowGenerator.QUALITY_MEDIUM : ShadowGenerator.QUALITY_LOW;
+    this.world.shadows.usePercentageCloserFiltering = settings.shadows === 'high';
+    this.world.shadows.getShadowMap()?.resetRefreshCounter();
+    const density = Math.min(window.devicePixelRatio || 1, 1.5);
+    const scale = (settings.renderScale || 1) * density * (settings.quality === 'low' ? 0.7 : 1);
+    this.engine.setHardwareScalingLevel(1 / Math.max(0.35, Math.min(2, scale)));
     this.engine.resize();
+  }
+
+  private cacheWeaponMeshes(): void {
+    this.weaponMeshes = this.weapon.getChildMeshes();
+    this.muzzleFlash = this.weaponMeshes.find((mesh) => mesh.name === 'muzzle-flash');
+  }
+
+  private get aiming(): boolean {
+    return (
+      this.active &&
+      this.aimHeld &&
+      this.tool === 'firearm' &&
+      !this.buying &&
+      this.matchHealth > 0 &&
+      !this.gun.reloading
+    );
+  }
+
+  private get equipmentSlot(): number {
+    return this.tool === 'firearm'
+      ? this.slot === 'primary'
+        ? 1
+        : 2
+      : this.tool === 'knife'
+        ? 3
+        : this.tool === 'grenade'
+          ? 4 + this.grenadeSlot
+          : 6;
+  }
+
+  private availableEquipment(): number[] {
+    return [
+      ...(this.gun.inventory.primary.owned ? [1] : []),
+      ...(this.gun.inventory.secondary.owned ? [2] : []),
+      3,
+      ...(this.equipment.grenadeSlots[0] ? [4] : []),
+      ...(this.equipment.grenadeSlots[1] ? [5] : []),
+      ...(this.hasBomb ? [6] : []),
+    ];
+  }
+
+  private selectEquipment(slot: number): void {
+    if (slot === 1 || slot === 2) this.switchWeapon(slot === 1 ? 'primary' : 'secondary');
+    else if (slot === 3) this.switchTool('knife');
+    else if (slot === 4 || slot === 5) {
+      this.grenadeSlot = slot === 4 ? 0 : 1;
+      this.switchTool('grenade');
+      this.emitSnapshot();
+    } else if (slot === 6) {
+      if (this.hasBomb) this.switchTool('bomb');
+      else this.buyMessage = 'Você não está carregando a bomba.';
+    }
+  }
+
+  private dropEquipment(): void {
+    if (this.matchHealth <= 0) return;
+    this.dropSequence++;
+    this.trigger = false;
+    this.aimHeld = false;
+    if (this.online) return; // The authoritative match removes and publishes the item.
+    let item: Omit<DroppedItemState, 'id' | 'position' | 'expiresAt'> | undefined;
+    if (this.tool === 'firearm') {
+      const magazine = this.gun.drop(this.slot, this.elapsed);
+      if (magazine) item = { kind: this.slot, ...magazine };
+    } else if (this.tool === 'grenade' && this.equipment.dropGrenade(this.grenadeSlot))
+      item = { kind: 'grenade' };
+    if (!item) {
+      this.buyMessage = 'Este equipamento não pode ser largado.';
+      return;
+    }
+    this.trainingDrops.push({
+      ...item,
+      id: `training-${this.dropSequence}`,
+      position: { ...this.body.position, y: this.body.position.y + 0.15 },
+      expiresAt: this.elapsed + 180,
+    });
+    if (this.trainingDrops.length > 64) this.trainingDrops.shift();
+    this.switchTool('knife');
+    this.syncDroppedItems(this.trainingDrops);
+  }
+
+  private pickupTrainingItem(): void {
+    const origin = { ...this.body.position, y: this.body.position.y + this.body.eyeHeight };
+    const nearby = this.trainingDrops
+      .map((item) => ({
+        item,
+        distance: Math.hypot(
+          item.position.x - origin.x,
+          item.position.y - origin.y,
+          item.position.z - origin.z,
+        ),
+      }))
+      .filter(({ distance }) => distance < 2.2)
+      .sort((a, b) => a.distance - b.distance);
+    for (const { item, distance } of nearby) {
+      const direction = {
+        x: (item.position.x - origin.x) / distance,
+        y: (item.position.y - origin.y) / distance,
+        z: (item.position.z - origin.z) / distance,
+      };
+      if (this.world.solids.some((solid) => rayBox(origin, direction, solid) < distance - 0.1))
+        continue;
+      const picked =
+        item.kind === 'grenade'
+          ? this.equipment.addGrenade()
+          : this.gun.pickup(
+              item.kind,
+              { ammo: item.ammo ?? 0, reserve: item.reserve ?? 0 },
+              this.elapsed,
+            );
+      if (!picked) continue;
+      this.trainingDrops = this.trainingDrops.filter((entry) => entry.id !== item.id);
+      this.buyMessage = 'Equipamento recolhido.';
+      this.syncDroppedItems(this.trainingDrops);
+      return;
+    }
+  }
+
+  private syncDroppedItems(items: readonly DroppedItemState[]): void {
+    for (const item of items) {
+      if (this.droppedMeshes.has(item.id)) continue;
+      const model =
+        item.kind === 'grenade'
+          ? this.createGrenadeMesh(item.position)
+          : createWeapon(this.scene, this.camera, item.kind === 'secondary');
+      model.parent = null;
+      model.position.set(item.position.x, item.position.y, item.position.z);
+      model.rotation.set(0, 0, Math.PI / 2);
+      if (item.kind !== 'grenade') model.scaling.setAll(0.8);
+      const meshes = [model, ...model.getChildMeshes()];
+      for (const mesh of meshes) {
+        if (!('renderingGroupId' in mesh)) continue;
+        const part = mesh as AbstractMesh;
+        part.renderingGroupId = 0;
+        part.isPickable = false;
+        part.alwaysSelectAsActiveMesh = false;
+        if (part.name === 'muzzle-flash') part.setEnabled(false);
+      }
+      this.droppedMeshes.set(item.id, model);
+    }
+    for (const [id, model] of this.droppedMeshes)
+      if (!items.some((item) => item.id === id)) {
+        model.dispose();
+        this.droppedMeshes.delete(id);
+      }
   }
 
   private replaceWeapon(): void {
@@ -580,7 +863,10 @@ export class Game {
     this.weapon =
       this.tool === 'firearm'
         ? createWeapon(this.scene, this.camera, this.slot === 'secondary')
-        : createEquipmentView(this.scene, this.camera, this.tool);
+        : this.tool === 'bomb'
+          ? createBombView(this.scene, this.camera)
+          : createEquipmentView(this.scene, this.camera, this.tool);
+    this.cacheWeaponMeshes();
     this.weapon.setEnabled(this.hasStarted);
   }
 
@@ -592,6 +878,8 @@ export class Game {
     const changed = this.gun.switch(slot, this.elapsed);
     if (!changed && this.tool === 'firearm') return;
     this.tool = 'firearm';
+    this.aimHeld = false;
+    this.audio.play('deploy');
     this.equipment.observe(this.fireSequence);
     this.gun.resetTrigger(this.fireSequence);
     this.toolReady = this.elapsed + 0.25;
@@ -600,9 +888,11 @@ export class Game {
     this.emitSnapshot();
   }
 
-  private switchTool(tool: 'knife' | 'grenade'): void {
+  private switchTool(tool: 'knife' | 'grenade' | 'bomb'): void {
     if (this.tool === tool) return;
     this.tool = tool;
+    this.aimHeld = false;
+    this.audio.play('deploy');
     this.trigger = false;
     this.recoil = 0;
     this.equipment.observe(this.fireSequence);
@@ -647,16 +937,25 @@ export class Game {
       this.trigger,
       this.fireSequence,
       { yaw: this.yaw, pitch: this.pitch },
-      { speed: this.body.speed, grounded: this.body.grounded, stance: this.body.stance },
+      {
+        speed: this.body.speed,
+        grounded: this.body.grounded,
+        stance: this.body.stance,
+        aiming: this.aiming,
+      },
     );
     if (!shot) return;
     this.shots++;
     this.flashUntil = this.elapsed + 0.045;
     this.recoil = 1;
     this.audio.play('shot', this.slot);
-    this.syncCamera(1);
     const direction = new Vector3(shot.direction.x, shot.direction.y, shot.direction.z);
-    const ray = new Ray(this.camera.position.clone(), direction, 100);
+    const eye = new Vector3(
+      this.body.position.x,
+      this.body.position.y + this.body.eyeHeight,
+      this.body.position.z,
+    );
+    const ray = new Ray(eye, direction, 100);
     const picked = this.scene.pickWithRay(
       ray,
       (mesh) => mesh.isEnabled() && mesh.isPickable && mesh.isVisible,
@@ -683,104 +982,159 @@ export class Game {
     this.emitSnapshot();
   }
 
-  private frame(): void {
-    const dt = Math.min(this.engine.getDeltaTime() / 1000, 0.05);
-    if (this.active) {
-      this.elapsed += dt;
-      const wasGrounded = this.body.grounded;
-      const beforeX = this.body.position.x,
-        beforeZ = this.body.position.z;
-      if (!this.online || (this.matchHealth > 0 && this.combatAllowed))
-        this.body.step(
-          {
-            forward: this.buying
-              ? 0
-              : Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')),
-            right: this.buying ? 0 : Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')),
-            sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
-            jump: this.keys.has('Space'),
-            stance: this.requestedStance,
-          },
-          this.yaw,
-          dt,
-        );
-      this.gun.update(this.elapsed, dt);
-      this.syncCamera(1 - Math.exp(-18 * dt));
-      this.stepDistance += Math.hypot(
-        this.body.position.x - beforeX,
-        this.body.position.z - beforeZ,
-      );
-      if (this.body.grounded && this.body.sprinting && this.stepDistance > 1.25) {
-        this.audio.play('step');
-        this.stepDistance = 0;
+  private currentInput(): MatchInput {
+    const active = this.active && !this.buying && this.matchHealth > 0 && this.combatAllowed;
+    return {
+      tool: this.tool,
+      grenadeSlot: this.grenadeSlot,
+      dropSequence: this.dropSequence,
+      aiming: active && this.aiming,
+      interact: this.active && !this.buying && this.matchHealth > 0 && this.keys.has('KeyE'),
+      forward: active ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) : 0,
+      right: active ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) : 0,
+      sprint: active && (this.keys.has('ControlLeft') || this.keys.has('ControlRight')),
+      walk: active && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')),
+      jump: active && this.keys.has('Space'),
+      stance: this.requestedStance,
+      yaw: this.yaw,
+      pitch: this.pitch,
+      fire: active && this.trigger,
+      fireSequence: this.fireSequence,
+      reloadSequence: this.reloadSequence,
+      buySequence: this.purchaseSequence,
+      buyItem: this.purchaseItem,
+      reload: active && this.tool === 'firearm' && this.keys.has('KeyR'),
+      weapon: this.slot,
+    };
+  }
+
+  private simulate(dt: number): void {
+    this.elapsed += dt;
+    this.previousPosition = { ...this.body.position };
+    const wasGrounded = this.body.grounded;
+    const beforeX = this.body.position.x,
+      beforeZ = this.body.position.z;
+    if (!this.localMatch && (!this.online || (this.matchHealth > 0 && this.combatAllowed)))
+      this.body.step(this.currentInput(), this.yaw, dt);
+    this.gun.update(this.elapsed, dt);
+    if (this.trigger) this.shoot();
+    // Offline actors share a single authoritative simulation at60Hz, avoiding20Hz corrections.
+    if (this.online && this.localMatch) {
+      this.events.onInput?.(this.currentInput());
+      this.events.onTick?.(dt);
+    }
+    this.stepDistance += Math.hypot(this.body.position.x - beforeX, this.body.position.z - beforeZ);
+    if (
+      this.body.grounded &&
+      this.body.moving &&
+      !this.currentInput().walk &&
+      this.body.stance === 'standing' &&
+      this.stepDistance > 1.25
+    ) {
+      this.audio.play('step');
+      this.stepDistance = 0;
+    }
+    if (!wasGrounded && this.body.grounded) this.audio.play('land');
+    if (!this.online) {
+      const validDrops = this.trainingDrops.filter((item) => item.expiresAt > this.elapsed);
+      if (validDrops.length !== this.trainingDrops.length) {
+        this.trainingDrops = validDrops;
+        this.syncDroppedItems(validDrops);
       }
-      if (!wasGrounded && this.body.grounded) this.audio.play('land');
-      if (!this.online)
-        this.buyAllowed =
-          this.elapsed <= 90 &&
-          Math.hypot(
-            this.body.position.x - this.world.spawn.x,
-            this.body.position.z - this.world.spawn.z,
-          ) <= 6;
-      if (this.trigger) this.shoot();
+      this.buyAllowed =
+        this.elapsed <= 90 &&
+        Math.hypot(
+          this.body.position.x - this.world.spawn.x,
+          this.body.position.z - this.world.spawn.z,
+        ) <= 6;
       for (const target of this.world.targets) {
-        if (target.downUntil && this.elapsed >= target.downUntil) {
-          target.downUntil = 0;
-          this.targetHealth.delete(target.id);
-          target.parts.forEach((part) => part.setEnabled(true));
-          this.world.shadows.getShadowMap()?.resetRefreshCounter();
-        }
+        if (!target.downUntil || this.elapsed < target.downUntil) continue;
+        target.downUntil = 0;
+        this.targetHealth.delete(target.id);
+        target.parts.forEach((part) => part.setEnabled(true));
+        this.world.shadows.getShadowMap()?.resetRefreshCounter();
       }
-      this.impacts.update(this.elapsed);
-      this.weapon
-        .getChildMeshes()
-        .find((mesh) => mesh.name === 'muzzle-flash')
-        ?.setEnabled(this.elapsed < this.flashUntil);
-      this.recoil = Math.max(0, this.recoil - dt * 7);
+    }
+    this.impacts.update(this.elapsed);
+    this.updateEffects(dt);
+    this.recoil = Math.max(0, this.recoil - dt * 7);
+  }
+
+  private frame(): void {
+    const dt = Math.min(this.engine.getDeltaTime() / 1000, 0.25);
+    this.aimBlend += (Number(this.aiming) - this.aimBlend) * (1 - Math.exp(-18 * dt));
+    this.camera.fov = (this.settings.fov * (1 - this.aimBlend * 0.28) * Math.PI) / 180;
+    this.flashlight.setEnabled(this.active && this.flashlightOn && this.matchHealth > 0);
+    if (this.flashlight.isEnabled()) {
+      const direction = shotDirection(this.yaw, this.pitch, 0, 0);
+      const origin = { ...this.body.position, y: this.body.position.y + this.body.eyeHeight };
+      this.flashlight.range = Math.min(
+        24,
+        ...this.world.solids.map((solid) => rayBox(origin, direction, solid) + 0.15),
+      );
+    }
+    if (this.active) {
+      this.renderAlpha = this.clock.advance(dt, (step) => this.simulate(step));
+      this.cameraCorrection.scaleInPlace(Math.exp(-18 * dt));
+      this.syncCamera(1 - Math.exp(-22 * dt));
+      this.muzzleFlash?.setEnabled(this.elapsed < this.flashUntil);
       const bob =
         this.body.moving && this.body.grounded
-          ? Math.sin(this.elapsed * (this.body.sprinting ? 15 : 10)) * 0.007
+          ? Math.sin(this.elapsed * (this.body.sprinting ? 15 : 10)) * 0.006
           : 0;
       const reloading = this.tool === 'firearm' && this.gun.reloading;
-      this.weapon.position.y = -0.24 + bob - (reloading ? 0.18 : 0);
+      const ws = this.gun.snapshot(this.elapsed);
+      const reloadDuration = this.slot === 'primary' ? 2.45 : 2.2;
+      const reloadProgress = reloading ? 1 - ws.reloadRemaining / reloadDuration : 0;
+      const reloadDip = reloading ? Math.sin(Math.min(1, reloadProgress) * Math.PI) : 0;
+      const deploying = this.elapsed < this.toolReady || ws.deployRemaining > 0;
+      const deployDip = deploying
+        ? Math.min(0.3, Math.max(this.toolReady - this.elapsed, ws.deployRemaining) * 0.32)
+        : 0;
+      this.weapon.position.y = -0.24 + bob - reloadDip * 0.16 - deployDip;
       this.weapon.position.z = 0.55 - this.recoil * (this.tool === 'knife' ? -0.16 : 0.035);
+      this.weapon.position.x = 0.23 * (1 - this.aimBlend);
+      this.weapon.position.y += this.aimBlend * 0.08;
       this.weapon.rotation.x =
-        -this.recoil * (this.tool === 'knife' ? 0.75 : 0.07) + (reloading ? -0.5 : 0);
-      if (this.tool === 'grenade')
-        this.weapon.setEnabled(this.hasStarted && this.equipment.grenades > 0);
-    } else if (!this.hasStarted) {
-      this.menuCamera.position.x = 29 + Math.sin(performance.now() * 0.00004) * 1.4;
-      this.menuCamera.setTarget(new Vector3(-1, 2, 5));
-    }
-    if (this.online) {
-      this.netTimer += dt;
-      if (this.netTimer >= 0.05) {
-        this.netTimer = 0;
-        const active = this.active && !this.buying && this.matchHealth > 0 && this.combatAllowed;
-        this.events.onInput?.({
-          tool: this.tool,
-          interact: active && this.keys.has('KeyE'),
-          forward: active ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) : 0,
-          right: active ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) : 0,
-          sprint: active && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')),
-          jump: active && this.keys.has('Space'),
-          stance: this.requestedStance,
-          yaw: this.yaw,
-          pitch: this.pitch,
-          fire: active && this.trigger,
-          fireSequence: this.fireSequence,
-          reloadSequence: this.reloadSequence,
-          buySequence: this.purchaseSequence,
-          buyItem: this.purchaseItem,
-          reload: active && this.tool === 'firearm' && this.keys.has('KeyR'),
-          weapon: this.slot,
-        });
+        -this.recoil * (this.tool === 'knife' ? 0.75 : 0.07) - reloadDip * 0.5 + deployDip;
+      this.weapon.rotation.z =
+        reloadDip * 0.18 + (this.body.moving ? Math.sin(this.elapsed * 7) * 0.008 : 0);
+      if (this.tool === 'firearm')
+        animateWeapon(this.weapon, this.elapsed, this.recoil, reloading, deploying);
+      else animateEquipmentView(this.weapon, this.elapsed, this.recoil);
+      this.weapon.setEnabled(
+        this.hasStarted &&
+          (this.tool === 'firearm'
+            ? this.gun.inventory[this.slot].owned
+            : this.tool === 'grenade'
+              ? this.equipment.grenadeSlots[this.grenadeSlot]
+              : this.tool === 'bomb'
+                ? this.hasBomb
+                : true),
+      );
+    } else {
+      this.clock.reset();
+      if (!this.localMatch) this.updateEffects(dt);
+      if (!this.hasStarted) {
+        const urban = this.mapId === 'old-quarter';
+        this.menuCamera.position.x =
+          (urban ? 35 : 29) + Math.sin(performance.now() * 0.00004) * 1.4;
+        this.menuCamera.position.y = urban ? 23 : 18;
+        this.menuCamera.position.z = urban ? -39 : -32;
+        this.menuCamera.setTarget(new Vector3(-1, 2, 5));
       }
     }
-    this.updateEffects(dt);
+    // Remote rooms keep sending neutral input while paused; offline rooms do not advance.
+    if (this.online && !this.localMatch) {
+      this.netTimer += dt;
+      if (this.netTimer >= 0.05) {
+        this.netTimer %= 0.05;
+        this.events.onInput?.(this.currentInput());
+      }
+    }
     this.hudTimer += dt;
     if (this.hudTimer >= 0.05) {
-      this.hudTimer = 0;
+      this.hudTimer %= 0.05;
       this.emitSnapshot();
     }
     this.scene.render();
@@ -789,12 +1143,44 @@ export class Game {
   applyMatch(state: MatchState): void {
     const own = state.actors.find((a) => a.id === state.self);
     if (!own) return;
+    const serverRestart = this.receivedMatch && state.matchId !== this.matchId;
+    if (serverRestart) {
+      this.elapsed = 0;
+      this.hitUntil = 0;
+      this.flashUntil = 0;
+      this.damageUntil = 0;
+      this.canvas.classList.remove('taking-damage');
+    }
+    if (
+      !this.localMatch &&
+      this.receivedMatch &&
+      !serverRestart &&
+      this.matchHealth > 0 &&
+      own.health > 0
+    ) {
+      const dx = this.body.position.x - own.position.x,
+        dz = this.body.position.z - own.position.z;
+      if (Math.hypot(dx, dz) < 2) {
+        this.cameraCorrection.x += dx;
+        this.cameraCorrection.z += dz;
+        if (this.cameraCorrection.lengthSquared() > 0.04)
+          this.cameraCorrection.normalize().scaleInPlace(0.2);
+      } else this.cameraCorrection.setAll(0);
+    }
     this.body.position = { ...own.position };
     this.body.velocityX = own.velocity.x;
     this.body.velocityY = own.velocity.y;
     this.body.velocityZ = own.velocity.z;
     this.body.grounded = own.grounded;
     this.body.stance = own.stance;
+    this.body.moving = this.body.speed > 0.1;
+    this.body.sprinting =
+      this.body.moving &&
+      own.stance === 'standing' &&
+      (this.keys.has('ControlLeft') || this.keys.has('ControlRight')) &&
+      !this.keys.has('ShiftLeft') &&
+      !this.keys.has('ShiftRight') &&
+      !this.aiming;
     this.contacts = state.actors
       .filter((a) => a.id !== state.self && a.health > 0)
       .map((a) => ({ x: a.position.x, z: a.position.z }));
@@ -802,14 +1188,26 @@ export class Game {
     this.buyAllowed = own.buyAllowed;
     if (own.buySequence === this.purchaseSequence) this.buyMessage = own.buyMessage;
     const newRound = this.receivedMatch && state.rounds.round !== this.matchRound;
-    const respawn = !this.receivedMatch || (this.matchHealth <= 0 && own.health > 0) || newRound;
+    const respawn =
+      !this.receivedMatch || (this.matchHealth <= 0 && own.health > 0) || newRound || serverRestart;
     this.matchRound = state.rounds.round;
+    this.matchId = state.matchId;
     this.combatAllowed = state.rounds.phase === 'active';
-    if (!this.combatAllowed || own.health <= 0) {
-      this.trigger = false;
+    if (!this.combatAllowed) this.trigger = false;
+    if (own.health <= 0) {
       this.keys.clear();
+      this.trigger = false;
+      this.aimHeld = false;
+      this.body.moving = false;
+      this.body.sprinting = false;
     }
     if (respawn) {
+      if (own.commandSequences) {
+        this.fireSequence = Math.max(this.fireSequence, own.commandSequences.fire);
+        this.reloadSequence = Math.max(this.reloadSequence, own.commandSequences.reload);
+        this.purchaseSequence = Math.max(this.purchaseSequence, own.commandSequences.buy);
+        this.dropSequence = Math.max(this.dropSequence, own.commandSequences.drop);
+      }
       this.gun = new WeaponController(seedFor(own.id) + own.deaths);
       this.gun.slot = own.weapon;
       this.gun.resetTrigger(this.fireSequence);
@@ -818,13 +1216,29 @@ export class Game {
       this.trigger = false;
       this.keys.clear();
       this.requestedStance = own.stance;
+      this.previousPosition = { ...own.position };
+      this.cameraCorrection.setAll(0);
       this.recoil = 0;
       this.toolReady = this.elapsed;
       this.clearProjectiles();
       this.replaceWeapon();
     }
     this.equipment.grenades = own.grenades;
+    if (own.grenadeSlots) this.equipment.grenadeSlots = own.grenadeSlots;
+    this.hasBomb =
+      state.rounds.bomb?.status === 'carried' && state.rounds.bomb.carrierId === state.self;
+    this.syncDroppedItems(state.droppedItems ?? []);
     if (own.weapon === this.slot) this.gun.reconcile(own.weaponState, this.elapsed);
+    else
+      this.gun.inventory = {
+        primary: { ...own.weaponState.inventory.primary },
+        secondary: { ...own.weaponState.inventory.secondary },
+      };
+    if (
+      (this.tool === 'firearm' && !this.gun.inventory[this.slot].owned) ||
+      (this.tool === 'bomb' && !this.hasBomb)
+    )
+      this.switchTool('knife');
     if (own.hits > this.hits) {
       this.hitUntil = this.elapsed + 0.2;
       this.audio.play('hit');
@@ -836,6 +1250,11 @@ export class Game {
       this.pitch = 0;
       this.syncCamera(1);
     }
+    if (this.receivedMatch && own.health < this.matchHealth) {
+      this.damageUntil = this.elapsed + 0.3;
+      this.canvas.classList.add('taking-damage');
+    }
+    if (this.elapsed >= this.damageUntil) this.canvas.classList.remove('taking-damage');
     this.receivedMatch = true;
     this.matchHealth = own.health;
     this.syncObjectives(state);
@@ -866,19 +1285,61 @@ export class Game {
         model = createActor(this.scene, actor.bot);
         this.remotes.set(actor.id, model);
       }
-      model.update(actor);
+      model.update(state.config.mode === 'deathmatch' ? { ...actor, team: 'bravo' } : actor);
+      const previous = this.remoteAudio.get(actor.id);
+      if (previous && actor.health > 0) {
+        const distance = Math.hypot(
+          actor.position.x - own.position.x,
+          actor.position.z - own.position.z,
+        );
+        const gain = Math.max(0, 1 - distance / 42) * 0.7;
+        const dx = actor.position.x - own.position.x,
+          dz = actor.position.z - own.position.z;
+        const pan = Math.max(
+          -1,
+          Math.min(1, (dx * Math.cos(this.yaw) - dz * Math.sin(this.yaw)) / Math.max(distance, 1)),
+        );
+        if (
+          actor.shots > previous.shots &&
+          canHearPosition(this.world.solids, own.position, actor.position)
+        )
+          this.audio.play('shot', actor.weapon, gain, pan);
+        previous.footsteps += Math.hypot(
+          actor.position.x - previous.position.x,
+          actor.position.z - previous.position.z,
+        );
+        if (
+          actor.grounded &&
+          actor.stance === 'standing' &&
+          Math.hypot(actor.velocity.x, actor.velocity.z) > 3.5 &&
+          previous.footsteps > 1.4
+        ) {
+          this.audio.play('step', actor.weapon, gain * 0.5, pan);
+          previous.footsteps = 0;
+        }
+      }
+      this.remoteAudio.set(actor.id, {
+        shots: actor.shots,
+        footsteps: previous?.footsteps || 0,
+        position: { ...actor.position },
+      });
     }
     for (const [id, mesh] of this.remotes)
       if (!state.actors.some((a) => a.id === id)) {
         mesh.dispose();
         this.remotes.delete(id);
+        this.remoteAudio.delete(id);
       }
   }
 
   private syncCamera(smoothing: number): void {
-    this.camera.position.x = this.body.position.x;
-    this.camera.position.z = this.body.position.z;
-    const targetHeight = this.body.position.y + this.body.eyeHeight;
+    const from = this.previousPosition ?? this.body.position;
+    const alpha = this.active && (!this.online || this.localMatch) ? this.renderAlpha : 1;
+    this.camera.position.x =
+      from.x + (this.body.position.x - from.x) * alpha + this.cameraCorrection.x;
+    this.camera.position.z =
+      from.z + (this.body.position.z - from.z) * alpha + this.cameraCorrection.z;
+    const targetHeight = from.y + (this.body.position.y - from.y) * alpha + this.body.eyeHeight;
     this.camera.position.y += (targetHeight - this.camera.position.y) * smoothing;
     this.camera.rotation.set(
       this.pitch + (this.tool === 'firearm' ? this.gun.recoil.pitch : 0),
@@ -889,13 +1350,27 @@ export class Game {
 
   private emitSnapshot(): void {
     this.events.onSnapshot({
+      aiming: this.aiming,
+      flashlight: this.flashlightOn,
+      equipmentSlot: this.equipmentSlot,
+      equippedOwned:
+        this.tool === 'firearm'
+          ? this.gun.inventory[this.slot].owned
+          : this.tool === 'grenade'
+            ? this.equipment.grenadeSlots[this.grenadeSlot]
+            : this.tool === 'bomb'
+              ? this.hasBomb
+              : true,
+      renderScale: 1 / this.engine.getHardwareScalingLevel(),
+      shadows: this.scene.shadowsEnabled,
+      map: this.mapId,
       tool: this.tool,
       grenades: this.equipment.grenades,
       weapon: this.slot,
-      weaponVisible: this.weapon
-        .getChildMeshes()
-        .some((mesh) => mesh.isEnabled() && this.scene.getActiveMeshes().indexOf(mesh) >= 0),
-      fov: this.settings.fov,
+      weaponVisible: this.weaponMeshes.some(
+        (mesh) => mesh.isEnabled() && this.scene.getActiveMeshes().indexOf(mesh) >= 0,
+      ),
+      fov: (this.camera.fov * 180) / Math.PI,
       reserve: this.gun.reserve,
       health: this.matchHealth,
       armor: this.wallet.armor,
@@ -908,7 +1383,12 @@ export class Game {
         (this.tool === 'firearm' && this.gun.isDeploying(this.elapsed)),
       speed: this.body.speed,
       spread: spreadFor(
-        { speed: this.body.speed, grounded: this.body.grounded, stance: this.body.stance },
+        {
+          speed: this.body.speed,
+          grounded: this.body.grounded,
+          stance: this.body.stance,
+          aiming: this.aiming,
+        },
         this.gun.burst,
       ),
       impacts: this.impactCount,
@@ -930,6 +1410,8 @@ export class Game {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.pause();
     this.listeners.abort();
     this.audio.dispose();

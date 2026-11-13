@@ -65,6 +65,41 @@ describe('shared Match integration', () => {
     expect(match.state().rounds.phase).toBe('active');
   });
 
+  it('does not let bots acquire targets or consume their reaction delay during freeze', () => {
+    const match = new Match('defuse');
+    match.add('bot', true);
+    match.add('enemy');
+    position(match, 'bot', -12, -8);
+    position(match, 'enemy', -12, -3);
+    const initialYaw = match.actors.get('bot')!.input.yaw;
+    advance(match, 4.9);
+    expect(match.state().rounds.phase).toBe('freeze');
+    expect(match.actors.get('bot')!.input.yaw).toBe(initialYaw);
+    expect(match.snapshot()[0]).toMatchObject({ shots: 0, aiState: 'patrol' });
+    advance(match, 0.15);
+    expect(match.state().rounds.phase).toBe('active');
+    expect(match.actors.get('bot')!.input.fire).toBe(false);
+    expect(match.snapshot()[0].shots).toBe(0);
+    advance(match, 0.7);
+    expect(match.snapshot()[0].shots).toBeGreaterThan(0);
+  });
+
+  it('lets an attacking bot defend a planted bomb and shoot a visible defender', () => {
+    const match = activeDefuse();
+    position(match, 'attacker', 0, 10);
+    advance(match, 3.1, () => input(match, 'attacker', { interact: true }));
+    expect(match.state().rounds.bomb?.status).toBe('planted');
+    const attacker = match.actors.get('attacker')!;
+    attacker.bot = true;
+    attacker.gun = new WeaponController(1, true);
+    position(match, 'defender', 0, 7.5);
+    advance(match, 1);
+    expect(attacker.input.interact).toBe(false);
+    expect(attacker.shots).toBeGreaterThan(0);
+    expect(match.actors.get('defender')!.health).toBeLessThan(100);
+    expect(match.state().rounds.bomb?.status).toBe('planted');
+  });
+
   it('blocks firearm and knife damage to teammates while applying enemy damage', () => {
     const match = activeDefuse();
     position(match, 'attacker', -12, -8);

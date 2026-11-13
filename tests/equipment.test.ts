@@ -38,19 +38,28 @@ describe('knife and grenade shared rules', () => {
     expect(inventory.swing(2, 3)).toBe(false);
     expect(EQUIPMENT.knife.damage).toBe(45);
   });
-  it('has one grenade per life and caps replacement purchases at one', () => {
+  it('starts with one grenade and supports two independently selectable slots', () => {
     const inventory = new EquipmentInventory();
     expect(inventory.grenades).toBe(1);
-    expect(inventory.addGrenade()).toBe(false);
-    expect(inventory.throw(0, 1, origin, forward)).not.toBeNull();
-    expect(inventory.grenades).toBe(0);
-    expect(inventory.throw(1, 2, origin, forward)).toBeNull();
+    expect(inventory.grenadeSlots).toEqual([true, false]);
     expect(inventory.addGrenade()).toBe(true);
-    expect(inventory.throw(2, 2, origin, forward)).toBeNull();
-    expect(inventory.throw(2, 3, origin, forward)).not.toBeNull();
+    expect(inventory.addGrenade()).toBe(false);
+    expect(inventory.grenadeSlots).toEqual([true, true]);
+    expect(inventory.throw(0, 1, origin, forward, [], 1)).not.toBeNull();
+    expect(inventory.grenadeSlots).toEqual([true, false]);
+    expect(inventory.throw(1, 2, origin, forward, [], 1)).toBeNull();
+    expect(inventory.throw(1, 3, origin, forward)).not.toBeNull();
+    expect(inventory.grenades).toBe(0);
     inventory.reset(3);
+    expect(inventory.throw(2, 4, origin, forward)).not.toBeNull();
+    expect(inventory.grenades).toBe(0);
+    expect(inventory.throw(3, 5, origin, forward)).toBeNull();
+    expect(inventory.addGrenade()).toBe(true);
+    expect(inventory.throw(4, 5, origin, forward)).toBeNull();
+    expect(inventory.throw(4, 6, origin, forward)).not.toBeNull();
+    inventory.reset(6);
     expect(inventory.grenades).toBe(1);
-    expect(inventory.throw(3, 3, origin, forward)).toBeNull();
+    expect(inventory.throw(5, 6, origin, forward)).toBeNull();
   });
   it('observes tool-switch presses without accidentally attacking', () => {
     const inventory = new EquipmentInventory();
@@ -58,7 +67,7 @@ describe('knife and grenade shared rules', () => {
     expect(inventory.swing(0, 10)).toBe(false);
     expect(inventory.swing(0, 11)).toBe(true);
     inventory.grenades = 8;
-    expect(inventory.grenades).toBe(1);
+    expect(inventory.grenades).toBe(2);
     inventory.grenades = -2;
     expect(inventory.grenades).toBe(0);
   });

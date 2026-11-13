@@ -1,9 +1,21 @@
+import { DEFAULT_SETTINGS, SETTINGS_KEY } from '../../src/core/settings';
 import type { Page } from '@playwright/test';
 export async function accountFixture(
   page: Page,
   authenticated = true,
   playerId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
 ) {
+  if (!authenticated)
+    await page.addInitScript(
+      ({ key, settings }) => {
+        // Auth assertions do not require full-resolution background rendering.
+        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(settings));
+      },
+      {
+        key: SETTINGS_KEY,
+        settings: { ...DEFAULT_SETTINGS, quality: 'low', shadows: 'off', renderScale: 0.5 },
+      },
+    );
   const user = {
     id: playerId,
     aud: 'authenticated',

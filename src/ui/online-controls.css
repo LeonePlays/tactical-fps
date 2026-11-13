@@ -1,0 +1,37 @@
+#online-chat-log {
+  position: absolute;
+  left: 24px;
+  bottom: 140px;
+  z-index: 22;
+  width: min(520px, 45vw);
+  padding: 10px 14px;
+  margin: 0;
+  background: #0a100cd9;
+  color: #c9e895;
+  list-style: none;
+  font: 12px/1.65 monospace;
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+#online-notice {
+  position: absolute;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0a100ce8;
+  color: #e9eade;
+  padding: 12px 20px;
+  z-index: 24;
+  pointer-events: none;
+}
+#online-chat-overlay,
+#online-host-overlay {
+  z-index: 21;
+}
+#online-host-form input[type='number'] {
+  width: 100px;
+  padding: 8px;
+  background: #182519;
+  color: #c9e895;
+  border: 1px solid #a6bf8544;
+}

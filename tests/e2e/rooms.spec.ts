@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { accountFixture } from './account-fixture';
+import { openServers, syncCapturedMouse } from './actions';
 test('two browsers share an arena with bots and can return to individual training', async ({
   browser,
   page,
@@ -8,8 +9,8 @@ test('two browsers share an arena with bots and can return to individual trainin
   await accountFixture(page);
   await page.goto('/');
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
-  await page.locator('.local-lobby summary').click();
   await page.locator('#room-bots').selectOption('2');
+  await openServers(page);
   await page.locator('#room-server').fill('ws://127.0.0.1:3002');
   await page.locator('#create-room').click();
   await expect(page.locator('#room-message')).toContainText('SALA');
@@ -21,25 +22,34 @@ test('two browsers share an arena with bots and can return to individual trainin
     await accountFixture(other, true, 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb');
     await other.goto('/');
     await expect(other.locator('#start-button')).toBeEnabled({ timeout: 40000 });
-    await other.locator('.local-lobby summary').click();
+    await openServers(other);
     await other.locator('#room-server').fill('ws://127.0.0.1:3002');
-    await other.locator('#room-code').fill(room);
+    await other.locator('#find-rooms').click();
+    await expect(other.locator('.server-room').filter({ hasText: room })).toContainText(
+      '1 jogadores',
+    );
+    await other.locator('.server-room').filter({ hasText: room }).click();
+    await expect(other.locator('#room-code')).toHaveValue(room);
     await other.locator('#join-room').click();
     await expect(other.locator('#hud')).toHaveAttribute('data-room', room);
     await expect(page.locator('#hud')).toHaveAttribute('data-actors', '4');
     await other.locator('#start-button').click();
+    await syncCapturedMouse(other);
     await expect(other.locator('#hud')).toBeVisible();
-    await expect(other.locator('.hud-top-left strong')).toContainText(room);
+    await expect(other.locator('.hud-top-left strong')).toHaveText('Complexo Ferro');
+    await expect(other.locator('#hud')).toHaveAttribute('data-map', 'industrial');
     await other.screenshot({ path: '/tmp/tactical-arena.png' });
     await other.keyboard.press('Escape');
     await other.getByRole('button', { name: 'VOLTAR AO MENU', exact: true }).click();
-    await other.locator('#disconnect-room').click();
+    await expect(other.locator('#hud')).not.toHaveAttribute('data-room');
     await expect(other.locator('#start-label')).toHaveText('INICIAR TREINO');
     await expect(page.locator('#hud')).toHaveAttribute('data-actors', '3');
   } finally {
     await context.close();
   }
+  await openServers(page);
   await page.locator('#disconnect-room').click();
+  await expect(page.locator('#start-label')).toHaveText('INICIAR TREINO');
 });
 
 test('bots run in this browser without a WebSocket server', async ({ page }) => {
@@ -53,8 +63,10 @@ test('bots run in this browser without a WebSocket server', async ({ page }) => 
   await expect(page.locator('#hud')).toHaveAttribute('data-room', 'LOCAL');
   await expect(page.locator('#hud')).toHaveAttribute('data-actors', '3');
   await page.locator('#start-button').click();
+  await syncCapturedMouse(page);
   await expect(page.locator('#hud')).toBeVisible();
-  await expect(page.locator('.hud-top-left strong')).toContainText('LOCAL');
+  await expect(page.locator('.hud-top-left strong')).toHaveText('Complexo Ferro');
+  await expect(page.locator('#hud')).toHaveAttribute('data-map', 'industrial');
   await page.keyboard.press('2');
   await expect(page.locator('.hud-ammo .label')).toHaveText('PISTOLA P-09');
   await expect(page.locator('#hud')).toHaveAttribute('data-weapon-visible', 'true');
@@ -69,7 +81,7 @@ test('an unavailable multiplayer server does not block returning to local bots',
   await accountFixture(page);
   await page.goto('/');
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
-  await page.locator('.local-lobby summary').click();
+  await openServers(page);
   await page.locator('#room-server').fill('ws://127.0.0.1:39999');
   await page.locator('#create-room').click();
   await expect(page.locator('#error-banner')).toContainText('conectar');
@@ -78,6 +90,7 @@ test('an unavailable multiplayer server does not block returning to local bots',
   await expect(page.locator('#hud')).toHaveAttribute('data-room', 'LOCAL');
   await expect(page.locator('#start-button')).toBeEnabled();
   await page.locator('#start-button').click();
+  await syncCapturedMouse(page);
   await expect(page.locator('#hud')).toBeVisible();
   await expect(page.locator('#error-banner')).toBeHidden();
 });

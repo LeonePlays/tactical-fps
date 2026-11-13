@@ -29,6 +29,7 @@ export interface AimContext {
   speed: number;
   grounded: boolean;
   stance: Stance;
+  aiming?: boolean;
 }
 // Original, controllable patterns. These are tunable targets, not extracted CS assets/data.
 const RIFLE_SPRAY = [
@@ -74,9 +75,10 @@ export function spreadFor(context: AimContext, heat = 0): number {
   const ratio = Math.min(1, context.speed / SPEED.run);
   // Grounded accuracy recovers from actual velocity, including release/counter-strafing.
   return (
-    (context.grounded ? 0.0008 + ratio * ratio * 0.035 : 0.065) *
+    ((context.grounded ? 0.0008 + ratio * ratio * 0.035 : 0.065) *
       (context.stance === 'standing' ? 1 : context.stance === 'crouching' ? 0.65 : 0.45) +
-    heat * 0.0006
+      heat * 0.0006) *
+    (context.aiming && context.grounded && context.speed < 0.2 ? 0.7 : 1)
   );
 }
 export function shotDirection(yaw: number, pitch: number, cone: number, seed: number) {

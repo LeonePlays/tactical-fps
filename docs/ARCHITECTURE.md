@@ -1,53 +1,48 @@
-# Arquitetura da primeira versão jogável
+# Arquitetura — beta 0.4
 
-## Escopo
+## Fonte e escopo
 
-Beta 0.3 entrega treino individual, combate livre e partidas de bomba com bots no navegador de computador. Visitantes entram sem autenticação; contas são opcionais para treino/bots. O planejamento GDD 1.4 permanece como referência; `GDD.md` foi preservado como recebido. Esta documentação registra somente as decisões desta implementação.
+A base preservada é TypeScript/Vite/Babylon.js. Na inspeção desta entrega, a principal acessível era `tactical-fps`; as branches `main` e `opencode-*` citadas no pedido não apareceram. O planejamento GDD 1.4 e `GDD.md` permanecem como recebidos. Não há importação de um deployment compilado para substituir a fonte.
 
-## Fluxo em execução
+Treino e partidas offline funcionam como visitante. Contas são opcionais no jogo local; salas entre jogadores usam autenticação real e processo WebSocket separado.
 
-`main.ts` conecta a interface ao jogo e carrega o motor 3D sob demanda. `Game` possui cena, câmeras, sessão, entrada, arma e áudio. O menu usa uma câmera panorâmica do mesmo mapa jogável. A câmera FPS passa a ser ativa após a captura do ponteiro. Escape, perda de foco e troca de aba interrompem a simulação; o tempo de treino, a recarga e os alvos também param.
+## Simulação e renderização
 
-`world.ts` constrói o Complexo Ferro com primitivas Babylon.js e texturas originais geradas localmente, com semente fixa. O armazém A é acessível; a expedição B é um bloco de cenário fechado. O perímetro é fechado. Caixas de colisão acompanham a geometria sólida; sinalizações, faixas, arma e decoração não criam obstáculos. Há seis alvos sinalizados em laranja, com reaparecimento em quatro segundos. Raios de disparo respeitam a oclusão do cenário. Não há download de modelos, CDN ou fontes; Supabase é usado para autenticação e salvamento.
+`main.ts` conecta o ciclo de vida da interface a `Game`, que possui cena, câmeras, entrada e feedback. A carga do motor é sob demanda. O menu usa uma câmera panorâmica; a câmera FPS requer captura do ponteiro após clique. Escape, perda de foco e troca de aba liberam a entrada e pausam o jogo local. Uma sala online continua no servidor durante a pausa.
 
-`physics.ts` é independente da renderização: corpo cinemático de base quadrada, coordenadas nos pés, gravidade e colisão AABB por eixo com subdivisão temporal em até 1/120 s. Normalização impede vantagem diagonal no chão. Movimento relativo ao yaw usa velocidade acumulada, aceleração, atrito e controle aéreo por projeção; Shift anda. A altura de colisão muda imediatamente, enquanto a câmera suaviza a transição. Teto bloqueia a mudança para postura mais alta; salto não funciona deitado e exige nova pressão após o salto anterior. A forma de colisão não pretende simular uma cápsula anatômica ou corpo deitado completo.
+`core/fixed-step.ts` acumula tempo e executa passos de **1/60 s**, com recuperação limitada após travamentos longos. `network/local.ts` não mantém um segundo relógio: `Game` envia entrada e chama seu transporte local a cada passo. A mesma `Match` determina física, tiro, inventário, dano e regras. Isso evita a antiga correção concorrente de uma simulação local a 20 Hz. Renderização interpola posições; a câmera suaviza altura e pequenas correções remotas sem alterar os volumes físicos.
 
-O passo por frame é limitado para evitar teletransporte após travamentos. Em máquinas muito lentas o tempo de simulação pode progredir mais lentamente que o relógio real. A opção de qualidade baixa ajuda máquinas com GPU limitada.
+`physics.ts` é independente de Babylon: coordenadas nos pés, AABB por eixo e subdivisão temporal, gravidade, aceleração, atrito e controle aéreo. WASD movimenta, Ctrl corre e Shift tem prioridade para andar silenciosamente. C e Z alternam agachar/deitar após verificar o teto. Saltos exigem nova pressão e não funcionam deitado. Degraus de até 0,30 m podem ser transpostos sem salto, desde que haja espaço. O corpo cinemático não é uma cápsula anatômica completa.
 
-`settings.ts` valida configurações lidas do `localStorage` e mantém a experiência funcional quando esse armazenamento está bloqueado. O SDK Supabase mantém a sessão no navegador; senhas não são armazenadas pelo jogo.
+## Mapas compartilhados
 
-## Próximas extensões
+`game/maps.ts` exporta definições sem dependência de renderização: blocos físicos, sólidos, oito spawns, limites, área da bomba e patrulhas. `Match`, navegação e renderer consomem esses mesmos dados.
 
-`src/features/contracts.ts` contém apenas contratos TypeScript, sem implementações artificiais:
+- Industrial: arena Complexo Ferro, 32 × 32 m, nove volumes físicos.
+- Urbano: Bairro Antigo, 48 × 48 m, 36 volumes físicos e dois interiores atravessáveis, café e mercado.
 
-- `GameMode` permite extrair modos de treino, campanha e multiplayer quando existirem requisitos concretos.
-- `AIController` recebe snapshots observáveis; a implementação concreta em `navigation.ts` usa linha de visão e grafo de visibilidade com desvio de obstáculos.
-- `CampaignMission` descreve mapa e objetivos, sem impor uma história ao GDD.
-- `MultiplayerTransport` separa comunicação e ciclo de vida da renderização. O servidor local já valida movimento, disparos, acertos e saúde na arena; a versão ainda exige testes de carga e endurecimento antes de competição pública.
-- `AuthProvider` separa a UI de um futuro provedor de contas. A implementação atual usa Supabase Auth em `src/auth/account.ts`; o login é opcional no jogo local e necessário em salas entre jogadores.
+`world.ts` preserva o treino industrial e constrói a arena industrial. `urban-world.ts` constrói o cenário urbano. Detalhes decorativos ficam dentro dos volumes ou fora da área física; não interceptam raios autoritativos. Texturas, fachadas, props e skyline são originais gerados em código. Geometrias estáticas são agrupadas por material/picking, materiais são compartilhados e sombras estáticas não precisam ser recalculadas a cada frame.
 
-Os contratos permanecem como pontos de extensão. Salas locais usam a implementação concreta em `src/network/` e `server/`, enquanto treino individual e campanha têm escopos separados.
+## IA, personagens e equipamento
 
-## Qualidade e distribuição
+`navigation.ts` mantém grafo de visibilidade por mapa, com folga para o corpo, rotas pelos interiores e recuperação de bloqueios. Percepção usa alcance, FOV e linha de visão. A memória retém a última posição observada, sem acompanhar inimigos ocultos. A máquina de estados oferece patrulha, investigação, perseguição, combate, recuo, reagrupamento e objetivo. Os perfis Fácil/Normal/Difícil alteram reação, percepção, mira, cadência e controle parcial do recuo. Coordenação usa posições conhecidas dos aliados.
 
-`npm test` executa testes unitários de movimento, gravidade, colisões, saltos, posturas e persistência validada de configurações. `npm run build` verifica tipos e empacota o frontend. `npm run test:e2e`, após build, verifica a aplicação de produção com Chromium, WebGL e entrada nativa. A CI executa as três verificações.
+`actors.ts` produz operadores articulados com membros facetados, materiais por equipe e animações derivadas de movimento, postura e ações confirmadas. Geometria é agrupada por osso/material. `weapon.ts`, `equipment-view.ts` e `bomb-view.ts` geram as vistas de primeira pessoa e seus pivôs de animação. Nenhum modelo externo é baixado. O botão direito interpola posição de mira e FOV; F controla uma lanterna presa à câmera.
 
-A Vercel publica somente `dist/`; `server/` contém um processo persistente separado para partidas e não uma função serverless Vercel. A criação do projeto e o deploy efetivo dependem da conta Vercel do proprietário. A compilação usa apenas URL e chave publicável. Treino e bots funcionam sem Supabase; salas online exigem conta válida.
+`WeaponController` concentra as regras de armas compartilhadas; `ballistics.ts` determina recuo e dispersão. `equipment.ts` controla inventário, dois slots independentes de HE, golpe curto, lançamento, ricochetes, detonação e oclusão. Q remove o equipamento selecionado e E recupera itens próximos com linha de visão; munição e reserva acompanham armas largadas. A faca permanece no inventário. As teclas 1–6 e o scroll selecionam equipamento; a bomba exige posse no modo de objetivo. `ImpactPool` limita impactos a 64 meshes. Áudio é sintetizado originalmente, reutiliza buffer de ruído e libera nós após playback; mistura master/efeitos/música e feedback remoto por distância/panorama.
 
-## Arena multiplayer local
+## Regras e configuração
 
-`server/server.ts` autentica WebSockets, gerencia salas efêmeras e transmite estado a 20 Hz. `src/game/match.ts` simula movimento, bots e tiros. `src/network/arena.ts` compartilha colisões com a cena; `protocol.ts` valida entradas. O cliente envia intenção, nunca posições ou acertos. Há previsão local simples com correção direta por snapshots; não há interpolação avançada, compensação de latência nem reconexão com preservação de placar.
+`match-config.ts` centraliza opções validadas. O navegador normaliza preferências locais; o servidor rejeita configurações malformadas. Mapa, modo, bots, dificuldade, equipe, duração e limite entram na configuração efetiva transmitida no snapshot.
 
-A arena é separada do Complexo Ferro de treino, para manter geometria e colisões iguais no servidor e navegador. Auth real exige acesso ao Supabase; testes injetam um verificador isolado. Consulte `server/README.md` para os comandos, limites e publicação futura.
+`RoundController` distingue FFA, TDM e bomba. FFA usa pontos individuais; TDM registra pontos de equipe no momento da eliminação, preservando-os após desconexão. Ambos reaparecem em três segundos e terminam por tempo/pontos. Bomba tem preparação, plantio/desarme, pavio, placar de rodadas e ausência de reaparecimento durante a rodada. Seu objetivo usa a posição definida pelo mapa. `matchId` muda no reinício para limpar a apresentação e reinicializar a sessão sem confundir nova partida com a rodada anterior.
 
-## Atualização Classic Feel
+## Interface, persistência e distribuição
 
-`docs/CLASSIC-FEEL.md` documenta o diagnóstico, referência consultada, parâmetros e integração. `WeaponController` concentra regras de tiro/inventário no cliente e servidor. O HUD está em `ui/classic-hud.ts` e `styles/classic.css`; o radar usa Canvas 2D. `ImpactPool` limita marcas a 64 meshes. O áudio reutiliza o buffer de ruído e desconecta nós após os efeitos. O protocolo 3 inclui estado autoritativo de inventário/economia e sequências de comandos. A compra e o dano são validados no servidor.
+`ui/match-menu.ts` monta configuração persistida e `ui/session.ts` apresenta nomes, placar, resultado e notificações derivados de dados reais. TAB mostra o scoreboard. Perfil, créditos, servidores, pausa, configurações e resultado têm ações próprias. Preferências locais incluem áudio separado, resolução, sombras, sensibilidade e FOV. O SDK Supabase persiste sessão; senhas não são armazenadas pelo jogo. Ajustes/resumos visitantes não migram entre computadores e não são ranking competitivo.
 
-## Beta visitante, equipamento e rodadas
+`server/server.ts` transmite snapshots a 20 Hz, verifica tokens, valida intenções e administra salas efêmeras. Protocolo **5** inclui configuração, nomes, equipe, equipamento, itens largados, `matchId` e anfitrião. `/rooms` lista salas reais do processo, com CORS restrito às origens configuradas; não há diretório público fictício. Reinício e reconfiguração são reservados ao anfitrião, com transferência para outro humano conectado. `ui/online-controls.ts` abre chat global/equipe em T/Y e ajustes do anfitrião em H, somente em sala online. Mensagens são limitadas e distribuídas pelo servidor de acordo com sala/equipe; a interface usa texto, sem inserir HTML. Reconfiguração inicia uma nova partida e conserva os participantes humanos. Não há compensação avançada de latência nem reconexão com preservação de placar.
 
-`Match` é a simulação compartilhada entre `network/local.ts` e o servidor WebSocket. `RoundController` controla combate livre (3 minutos/10 eliminações) e bomba (melhor de cinco), preparação, plantio/desarme, fim e próxima rodada. Posição, dano, equipe, inventário e interações são validados pela simulação; o cliente envia intenção. O jogo local avança apenas com o ponteiro capturado. Salas online continuam durante a pausa.
+A Vercel publica apenas `dist/`. Servidor persistente/TLS/WSS e Supabase ativo são dependências separadas do multiplayer. O último diagnóstico registrado do domínio Supabase fornecido era NXDOMAIN; isso não bloqueia treino/bots.
 
-`equipment.ts` implementa inventário, golpes curtos, lançamento, ricochetes, detonação e oclusão. `equipment-view.ts` produz modelos de primeira pessoa. `actors.ts` cria humanoides articulados e compartilha materiais por cena. `navigation.ts` usa linha de visão, tempo de reação, memória curta e caminhos com folga para o corpo. Cores Alpha/Bravo identificam equipes no modo bomba; em combate livre todos são adversários.
-
-`main.ts` monta menu, diálogos e resultado/revanche. Auth não bloqueia visitantes: sem sessão armazenada não é necessário fazer requisição Supabase para iniciar. Ajustes e resumos visitantes ficam somente em localStorage; contas reais mantêm metadados no Supabase. Trocar/sair da conta desconecta sala online autenticada, preservando a disponibilidade do modo local.
+`npm test`, `npm run build` e Playwright cobrem os módulos e fluxos descritos. Resultados de cada execução devem vir do relatório real da entrega; presença de um teste não comprova aprovação. Não foi estabelecida uma medição de 60 FPS em hardware de referência. Campanha, porto, matchmaking, ranking e chat de voz permanecem no planejamento.

@@ -1,4 +1,7 @@
 import { ARENA_BLOCKS } from '../network/arena';
+import { getMap } from './maps';
+import type { MapId } from './match-config';
+import { createUrbanWorld } from './urban-world';
 import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
@@ -27,7 +30,8 @@ export interface World {
   spawn: { x: number; y: number; z: number };
 }
 
-export function createWorld(scene: Scene, arena = false): World {
+export function createWorld(scene: Scene, arena = false, map: MapId = 'industrial'): World {
+  if (arena && map === 'old-quarter') return createUrbanWorld(scene, getMap(map));
   const solids: Solid[] = [];
   const staticMeshes: { mesh: Mesh; castsShadow: boolean }[] = [];
   scene.clearColor = Color4.FromHexString('#aeb6aeff');

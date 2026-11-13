@@ -32,7 +32,9 @@ export class ClassicHud {
         ? String(state.ammo).padStart(2, '0')
         : state.tool === 'knife'
           ? '—'
-          : String(state.grenades),
+          : state.tool === 'bomb'
+            ? '1'
+            : String(state.equippedOwned ? 1 : 0),
     );
     this.text('reserve-count', firearm ? String(state.reserve) : '—');
     this.text('health-count', String(Math.ceil(state.health)));
@@ -65,11 +67,13 @@ export class ClassicHud {
     this.text(
       'reload-label',
       !firearm
-        ? state.tool === 'knife'
-          ? 'CLIQUE · GOLPE'
-          : state.grenades
-            ? 'CLIQUE · LANÇAR'
-            : 'SEM GRANADA · B / 6 COMPRAR'
+        ? state.tool === 'bomb'
+          ? 'E · PLANTAR / Q · LARGAR'
+          : state.tool === 'knife'
+            ? 'CLIQUE · GOLPE'
+            : state.grenades
+              ? 'CLIQUE · LANÇAR'
+              : 'SEM GRANADA · B / 6 COMPRAR'
         : state.reloading
           ? 'RECARREGANDO…'
           : state.deploying
@@ -88,7 +92,10 @@ export class ClassicHud {
     this.node('hit-marker').hidden = !state.hit;
     this.ammoLabel.textContent = firearm
       ? WEAPONS[state.weapon].name
-      : EQUIPMENT[state.tool === 'knife' ? 'knife' : 'grenade'].name;
+      : state.tool === 'bomb'
+        ? 'BOMBA · DISPOSITIVO'
+        : EQUIPMENT[state.tool === 'knife' ? 'knife' : 'grenade'].name +
+          (state.tool === 'grenade' ? ` · SLOT ${state.equipmentSlot - 3}` : '');
     this.scoreLabel.textContent = kills === undefined ? 'ALVOS' : 'ELIMINAÇÕES';
     this.node('buy-panel').hidden = !state.buying;
     this.text(
@@ -108,6 +115,12 @@ export class ClassicHud {
     this.crosshair.style.setProperty('--gap', `${gap.toFixed(1)}px`);
     Object.assign(this.root.dataset, {
       tool: state.tool,
+      aiming: String(state.aiming),
+      flashlight: String(state.flashlight),
+      equipmentSlot: String(state.equipmentSlot),
+      equippedOwned: String(state.equippedOwned),
+      fov: String(state.fov),
+      sprinting: String(state.sprinting),
       grenades: String(state.grenades),
       elapsed: String(state.elapsed),
       position: JSON.stringify(state.position),
@@ -118,6 +131,9 @@ export class ClassicHud {
       spread: state.spread.toFixed(5),
       impacts: String(state.impacts),
       deploying: String(state.deploying),
+      map: state.map,
+      renderScale: String(state.renderScale),
+      shadows: String(state.shadows),
     });
     if (!this.root.hidden) this.drawRadar(state);
   }

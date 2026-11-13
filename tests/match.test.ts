@@ -9,6 +9,20 @@ describe('authoritative arena', () => {
     expect(parseInput({ ...IDLE_INPUT, yaw: Infinity })).toBeNull();
     expect(parseInput({ ...IDLE_INPUT, fire: 'yes' })).toBeNull();
     expect(parseInput({ ...IDLE_INPUT, forward: 100 })?.forward).toBe(1);
+    expect(parseInput({ ...IDLE_INPUT, walk: 'yes' })).toBeNull();
+    expect(parseInput({ ...IDLE_INPUT, aiming: 1 })).toBeNull();
+    expect(parseInput({ ...IDLE_INPUT, grenadeSlot: 2 })).toBeNull();
+    expect(parseInput({ ...IDLE_INPUT, dropSequence: -1 })).toBeNull();
+    expect(
+      parseInput({
+        ...IDLE_INPUT,
+        tool: 'bomb',
+        grenadeSlot: 1,
+        dropSequence: 4,
+        walk: true,
+        aiming: true,
+      }),
+    ).toMatchObject({ tool: 'bomb', grenadeSlot: 1, dropSequence: 4, walk: true, aiming: true });
   });
   it('stops abandoned inputs and confines players to arena collisions', () => {
     const m = new Match();
@@ -68,7 +82,8 @@ describe('authoritative arena', () => {
 });
 
 it('authorizes purchases once per command, denies distant purchases and ignores client money', () => {
-  const m = new Match();
+  // Defuse retains the classic pistol start and buy economy; FFA grants both firearms.
+  const m = new Match('defuse');
   m.add('buyer');
   const initial = m.snapshot()[0];
   expect(initial.weapon).toBe('secondary');

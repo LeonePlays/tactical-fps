@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.1 — Controles, inventário e ferramentas de sala
+
+- C agacha, Z deita, Ctrl corre e Shift anda silenciosamente, com prioridade sobre a corrida.
+- Botão direito mantém mira com aproximação suave, arma centralizada e redução da velocidade; F alterna lanterna real.
+- Scroll percorre apenas equipamentos disponíveis. Slots 4/5 guardam HE independentes; 6 seleciona a bomba de quem a carrega.
+- Q larga arma, HE ou bomba; E recolhe com distância/oclusão, preservando munição e evitando duplicação. Faca é o equipamento permanente.
+- T/Y enviam chat real por sala/equipe; H configura mapa, modo, bots, dificuldade e limites pelo anfitrião online.
+- Protocolo 5: atualizar frontend e servidor juntos. Objetivos não podem ser manipulados através de paredes.
+
+## 0.4.0 — Mapas, equipes e polimento offline
+
+- Segundo mapa real: Bairro Antigo, com praça, ruas, café/mercado e rotas interiores; seleção compartilhada entre renderer, física, navegação e servidor.
+- TDM com pontos persistentes por equipe, proteção de aliados, reaparecimento e resultado; FFA e bomba preservados com limites configuráveis.
+- Fácil/Normal/Difícil afetam percepção, reação, giro, cadência, erro de mira e controle do recuo; IA por estados, navegação por mapa e recuperação de bloqueios.
+- Relógio fixo de 60 Hz e autoridade única nas partidas offline, interpolação de renderização e degraus baixos.
+- Operadores facetados e quatro viewmodels originais, animações de postura/ação, áudio dedicado e mistura master/efeitos/música.
+- Configuração persistida, perfil local, scoreboard TAB, notificações derivadas de mortes, resultado com vencedor e reinício.
+- Opções de resolução, sombras e tela cheia; menus de perfil, créditos e servidor com ações reais.
+- Protocolo 4, lista `/rooms` real, criação validada, reinício pelo anfitrião e transferência após desconexão.
+- Novos testes de mapas, IA, relógio, transporte local, modelos, configurações e apresentação. Consultar relatório da entrega para resultados efetivamente executados.
+
+## 0.3.0 — Beta visitante e rodadas
+
+- Treino e bots locais acessíveis como visitante, sem depender de Supabase.
+- Combate livre e bomba por equipes, preparação, plantio/desarme, resultado e nova partida.
+- Faca, HE com colisão/oclusão e compra de equipamento; correções de troca de ferramenta e disparos indevidos.
+- Navegação com obstáculos, personagens articulados e acabamento industrial original.
+- Persistência local de ajustes/resumos e autenticação opcional no jogo local.
+- Protocolo 3; projeto Supabase fornecido permaneceu com domínio indisponível, sem alegar correção de cadastro real.
+
 ## 0.2.0 — Classic Feel
 
 - Velocidade horizontal com aceleração, atrito, counter-strafe e air-strafe; Shift passa a andar.

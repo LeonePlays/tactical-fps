@@ -44,6 +44,30 @@ export class WeaponController {
     this.lastSequence = sequence;
     this.semiHeld = false;
   }
+  /** Moves the magazine out of the inventory; switching cannot recreate it. */
+  drop(slot: WeaponSlot, now: number): { ammo: number; reserve: number } | null {
+    const magazine = this.inventory[slot];
+    if (!magazine.owned) return null;
+    const dropped = { ammo: magazine.ammo, reserve: magazine.reserve };
+    this.inventory[slot] = { ammo: 0, reserve: 0, owned: false };
+    if (this.slot === slot) {
+      this.reloadEnd = 0;
+      this.readyAt = now + 0.3;
+      this.burst = 0;
+      this.recoil = { pitch: 0, yaw: 0 };
+    }
+    return dropped;
+  }
+  pickup(slot: WeaponSlot, magazine: { ammo: number; reserve: number }, now: number): boolean {
+    if (this.inventory[slot].owned) return false;
+    this.inventory[slot] = {
+      owned: true,
+      ammo: Math.max(0, Math.min(WEAPONS[slot].capacity, Math.floor(magazine.ammo))),
+      reserve: Math.max(0, Math.min(WEAPONS[slot].reserve, Math.floor(magazine.reserve))),
+    };
+    if (this.slot === slot) this.readyAt = now + WEAPONS[slot].deploy;
+    return true;
+  }
   get ammo() {
     return this.inventory[this.slot].ammo;
   }
@@ -69,6 +93,7 @@ export class WeaponController {
   reload(now: number): boolean {
     const mag = this.inventory[this.slot];
     if (
+      !mag.owned ||
       this.reloadEnd ||
       now < this.readyAt ||
       mag.ammo === WEAPONS[this.slot].capacity ||
@@ -107,6 +132,7 @@ export class WeaponController {
     const spec = WEAPONS[this.slot];
     if (
       (!trigger && !pressed) ||
+      !this.inventory[this.slot].owned ||
       (!spec.automatic && !pressed) ||
       this.reloadEnd ||
       now + 1e-8 < Math.max(this.readyAt, this.nextShot) ||

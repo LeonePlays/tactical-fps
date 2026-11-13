@@ -1,3 +1,4 @@
+import { syncCapturedMouse } from './actions';
 import { expect, test, type Page } from '@playwright/test';
 
 const hud = (page: Page) => page.locator('#hud');
@@ -6,6 +7,7 @@ const position = async (page: Page) =>
 
 async function enter(page: Page) {
   await page.locator('#start-button').click();
+  await syncCapturedMouse(page);
   await expect(hud(page)).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('game-canvas');
 }
@@ -51,7 +53,7 @@ test('a new visitor can move, use all equipment, return and retain browser setti
     .toBeGreaterThan(started + 0.4);
   await page.keyboard.up('w');
   expect((await position(page)).z).toBeGreaterThan(before.z + 0.5);
-  await page.keyboard.press('Control');
+  await page.keyboard.press('c');
   await expect(page.locator('#stance-label')).toHaveText('AGACHADO');
   await page.keyboard.press('z');
   await expect(page.locator('#stance-label')).toHaveText('DEITADO');
@@ -62,7 +64,7 @@ test('a new visitor can move, use all equipment, return and retain browser setti
     ['2', 'PISTOLA P-09'],
     ['1', 'CARABINA T-04'],
     ['3', 'FACA DE COMBATE'],
-    ['4', 'GRANADA HE'],
+    ['4', 'GRANADA HE · SLOT 1'],
   ]) {
     await page.keyboard.press(key!);
     await expect(page.locator('.hud-ammo .label')).toHaveText(label!);
@@ -97,36 +99,41 @@ test('a new visitor can move, use all equipment, return and retain browser setti
   expect(errors).toEqual([]);
 });
 
-test('a visitor can create both local match modes with three bots and leave each arena', async ({
+test('a visitor can create all three modes, load both real maps and leave each arena', async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(150_000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await expect(page.locator('#room-bots')).toHaveValue('3');
   await expect(page.locator('#match-mode')).toHaveValue('deathmatch');
 
-  for (const [mode, objective] of [
-    ['deathmatch', 'COMBATE LIVRE'],
-    ['defuse', 'RODADA 1'],
+  for (const [mode, map, objective] of [
+    ['deathmatch', 'industrial', 'COMBATE LIVRE'],
+    ['team-deathmatch', 'old-quarter', 'COMBATE EM EQUIPES'],
+    ['defuse', 'old-quarter', 'RODADA 1'],
   ]) {
+    await page.locator('#match-map').selectOption(map!);
     await page.locator('#match-mode').selectOption(mode!);
     await page.locator('#local-bots').click();
     await expect(hud(page)).toHaveAttribute('data-room', 'LOCAL');
     await expect(hud(page)).toHaveAttribute('data-actors', '4');
     await expect(page.locator('#start-button')).toBeEnabled();
     await enter(page);
+    await expect(hud(page)).toHaveAttribute('data-map', map!);
+    await expect(page.locator('.hud-top-left strong')).toHaveText(
+      map === 'industrial' ? 'Complexo Ferro' : 'Bairro Antigo',
+    );
+    const spawn = await position(page);
+    if (map === 'old-quarter') expect(Math.abs(spawn.z)).toBeGreaterThan(17);
+    else expect(Math.abs(spawn.z)).toBeCloseTo(12, 1);
     await expect(page.locator('#objective-banner')).toBeVisible();
     await expect(page.locator('#objective-banner')).toContainText(objective!);
     await expect(hud(page)).toHaveAttribute('data-weapon-visible', 'true');
     await expect(page.locator('.account-overlay')).toBeHidden();
     await leave(page);
-    await page.locator('.local-lobby summary').click();
-    await page.locator('#disconnect-room').click();
     await expect(hud(page)).not.toHaveAttribute('data-room');
     await expect(page.locator('#start-button')).toBeEnabled();
-    // The multiplayer disclosure stays open after disconnecting.
-    await page.locator('.local-lobby summary').click();
   }
   await enter(page);
   await expect(hud(page)).not.toHaveAttribute('data-room');

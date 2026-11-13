@@ -89,4 +89,53 @@ describe('original low-poly actor models', () => {
     model.update({ ...state, team: 'bravo' });
     expect(jacket.material).not.toBe(humanJacket.material);
   });
+  it('uses sculpted geometry and renders the authoritative equipment selection', () => {
+    const { model, state, frames } = setup();
+    const jacket = model.root.getChildMeshes().find((mesh) => mesh.name === 'operator-jacket')!;
+    expect(jacket.getTotalVertices()).toBeGreaterThan(24);
+    const nodes = model.root.getChildTransformNodes();
+    const rifle = nodes.find((node) => node.name === 'operator-rifle')!;
+    const pistol = nodes.find((node) => node.name === 'operator-sidearm')!;
+    const knife = nodes.find((node) => node.name === 'operator-held-knife')!;
+    const grenade = nodes.find((node) => node.name === 'operator-held-grenade')!;
+    model.update({ ...state, tool: 'firearm', weapon: 'secondary' });
+    frames();
+    expect(pistol.isEnabled()).toBe(true);
+    expect(rifle.isEnabled()).toBe(false);
+    model.update({ ...state, tool: 'knife' });
+    expect(knife.isEnabled()).toBe(true);
+    expect(pistol.isEnabled()).toBe(false);
+    model.update({ ...state, tool: 'grenade', grenades: 1 });
+    expect(grenade.isEnabled()).toBe(true);
+    expect(knife.isEnabled()).toBe(false);
+    model.update({ ...state, tool: 'grenade', grenades: 0 });
+    expect(grenade.isEnabled()).toBe(false);
+  });
+  it('aims with pitch, animates confirmed shots once, and reaches for the magazine on reload', () => {
+    const { model, state, frames } = setup();
+    const nodes = model.root.getChildTransformNodes();
+    const head = nodes.find((node) => node.name === 'operator-head')!;
+    const magazine = nodes.find((node) => node.name === 'operator-rifle-magazine')!;
+    const flash = model.root
+      .getChildMeshes()
+      .find((mesh) => mesh.name === 'operator-muzzle-flash')!;
+    model.update({ ...state, tool: 'firearm', weapon: 'primary', pitch: 0.5 });
+    frames();
+    expect(head.rotation.x).toBeGreaterThan(0.3);
+    expect(flash.isEnabled()).toBe(false);
+    model.update({ ...state, tool: 'firearm', weapon: 'primary', shots: state.shots + 1 });
+    frames(1);
+    expect(flash.isEnabled()).toBe(true);
+    frames(20);
+    expect(flash.isEnabled()).toBe(false);
+    model.update({
+      ...state,
+      tool: 'firearm',
+      weapon: 'primary',
+      weaponState: { ...state.weaponState, reloadRemaining: 1.225 },
+    });
+    frames();
+    expect(magazine.position.y).toBeLessThan(-0.18);
+    expect(flash.isEnabled()).toBe(false);
+  });
 });
