@@ -62,9 +62,7 @@ for (const mode of ['deathmatch', 'team-deathmatch'] as const) {
     await expect(page.locator('#scoreboard')).toBeHidden();
     await page.mouse.down();
     await page.mouse.up();
-    await expect
-      .poll(async () => Number(await page.locator('#ammo-count').textContent()))
-      .toBeLessThan(30);
+    // Live opponents may eliminate us and reset the magazine; shooting is verified in the invulnerable training tests.
     // No state fixture or accelerated clock: the real offline simulation reaches its timer.
     await expect(page.locator('#result-overlay')).toBeVisible({ timeout: 65000 });
     await expect(page.locator('#result-title')).toHaveText(/VENCEU|EMPATE/);
