@@ -1,3 +1,4 @@
+import { syncCapturedMouse } from './actions';
 import { test, expect } from '@playwright/test';
 import { accountFixture } from './account-fixture';
 test('optional login blocks input while open and logout returns to guest', async ({ page }) => {
@@ -22,6 +23,7 @@ test('secondary weapon is semi automatic and magazines remain separate', async (
   await page.goto('/');
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
   await page.locator('#start-button').click();
+  await syncCapturedMouse(page);
   await expect(page.locator('#hud')).toBeVisible();
   await page.keyboard.press('2');
   await expect(page.locator('.hud-ammo .label')).toHaveText('PISTOLA P-09');

@@ -1,14 +1,27 @@
-import type { MatchMode } from '../game/rounds';
+import type { MatchConfig, MatchMode, TeamPreference } from '../game/match-config';
 import { PROTOCOL_VERSION, type MatchInput, type MatchState } from './protocol';
+export interface ChatMessage {
+  type: 'chat';
+  id: string;
+  name: string;
+  team: boolean;
+  text: string;
+  at: number;
+}
 export function connectRoom(options: {
   url: string;
   token: string;
   create: boolean;
   bots: number;
   mode?: MatchMode;
+  config?: Partial<MatchConfig>;
+  name?: string;
+  team?: TeamPreference;
   room: string;
   state: (state: MatchState) => void;
   closed: (message: string) => void;
+  message?: (message: ChatMessage) => void;
+  notice?: (message: string) => void;
 }) {
   const url = new URL(options.url);
   if (
@@ -35,8 +48,11 @@ export function connectRoom(options: {
         protocol: PROTOCOL_VERSION,
         token: options.token,
         create: options.create,
-        bots: options.bots,
-        mode: options.mode ?? 'deathmatch',
+        ...(options.config
+          ? { config: options.config }
+          : { bots: options.bots, mode: options.mode ?? 'deathmatch' }),
+        name: options.name,
+        team: options.team,
         room: options.room,
       }),
     );
@@ -50,7 +66,18 @@ export function connectRoom(options: {
       }
       if (data.type === 'error') {
         message = String(data.message);
-        options.closed(message);
+        ws.close();
+      } else if (data.type === 'notice' && typeof data.message === 'string') {
+        options.notice?.(data.message);
+      } else if (
+        data.type === 'chat' &&
+        typeof data.id === 'string' &&
+        typeof data.name === 'string' &&
+        typeof data.text === 'string' &&
+        typeof data.team === 'boolean' &&
+        typeof data.at === 'number'
+      ) {
+        options.message?.(data);
       } else if (
         data.type === 'state' &&
         typeof data.room === 'string' &&
@@ -76,6 +103,18 @@ export function connectRoom(options: {
     send(input: MatchInput) {
       if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384)
         ws.send(JSON.stringify({ type: 'input', input }));
+    },
+    restart() {
+      if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384)
+        ws.send(JSON.stringify({ type: 'restart' }));
+    },
+    chat(text: string, team: boolean) {
+      if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384)
+        ws.send(JSON.stringify({ type: 'chat', text, team }));
+    },
+    configure(config: Partial<MatchConfig>) {
+      if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384)
+        ws.send(JSON.stringify({ type: 'configure', config }));
     },
     close() {
       intentional = true;

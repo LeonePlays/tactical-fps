@@ -1,4 +1,8 @@
 import { ARENA_BLOCKS } from '../network/arena';
+import { getMap } from './maps';
+import type { MapId } from './match-config';
+import { createUrbanWorld } from './urban-world';
+import { createCatalogWorld } from './catalog-world';
 import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
@@ -27,7 +31,9 @@ export interface World {
   spawn: { x: number; y: number; z: number };
 }
 
-export function createWorld(scene: Scene, arena = false): World {
+export function createWorld(scene: Scene, arena = false, map: MapId = 'industrial'): World {
+  if (arena && map === 'old-quarter') return createUrbanWorld(scene, getMap(map));
+  if (arena && map !== 'industrial') return createCatalogWorld(scene, getMap(map));
   const solids: Solid[] = [];
   const staticMeshes: { mesh: Mesh; castsShadow: boolean }[] = [];
   scene.clearColor = Color4.FromHexString('#aeb6aeff');
@@ -75,7 +81,7 @@ export function createWorld(scene: Scene, arena = false): World {
         `${name}-original-texture`,
         128,
         scene,
-        false,
+        true,
         Texture.NEAREST_SAMPLINGMODE,
       );
       const ctx = tex.getContext();
@@ -98,6 +104,9 @@ export function createWorld(scene: Scene, arena = false): World {
         ctx.strokeRect(0, 0, 128, 128);
       }
       tex.update();
+      tex.wrapU = Texture.WRAP_ADDRESSMODE;
+      tex.wrapV = Texture.WRAP_ADDRESSMODE;
+      tex.updateSamplingMode(Texture.TRILINEAR_SAMPLINGMODE);
       mat.diffuseTexture = tex;
     }
     return mat;

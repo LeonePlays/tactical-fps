@@ -52,14 +52,28 @@ describe('desktop FPS kinematic movement', () => {
     const backwards = player();
     const crouch = player();
     const prone = player();
-    advance(sprint, { forward: 1, sprint: true });
-    advance(backwards, { forward: -1, sprint: true });
+    advance(sprint, { forward: 1, walk: true });
+    advance(backwards, { forward: -1, walk: true });
     advance(crouch, { forward: 1, sprint: true, stance: 'crouching' });
     advance(prone, { forward: 1, sprint: true, stance: 'prone' });
     expect(sprint.speed).toBeCloseTo(SPEED.walk);
     expect(backwards.velocityZ).toBeCloseTo(-SPEED.walk);
     expect(crouch.speed).toBeCloseTo(SPEED.crouching);
     expect(prone.speed).toBeCloseTo(SPEED.prone);
+  });
+  it('runs faster with Ctrl while Shift and aiming take priority', () => {
+    const run = player(),
+      silent = player(),
+      aim = player();
+    advance(run, { forward: 1, sprint: true });
+    advance(silent, { forward: 1, sprint: true, walk: true });
+    advance(aim, { forward: 1, sprint: true, aiming: true });
+    expect(run.speed).toBeCloseTo(SPEED.sprint);
+    expect(run.sprinting).toBe(true);
+    expect(silent.speed).toBeCloseTo(SPEED.walk);
+    expect(aim.speed).toBeCloseTo(SPEED.walk);
+    expect(silent.sprinting).toBe(false);
+    expect(aim.sprinting).toBe(false);
   });
   it('jumps, lands, and requires release before jumping again', () => {
     const body = player();
@@ -169,5 +183,25 @@ describe('classic acceleration and air control', () => {
     advance(body, { forward: 1 }, 1);
     expect(body.velocityZ).toBe(0);
     expect(body.position.z).toBeCloseTo(1.65);
+  });
+});
+
+describe('walking over architectural steps', () => {
+  it('climbs a low curb without jumping and lands back on the ground', () => {
+    const body = player([box(0, 0.09, 2, 3, 0.18, 2)]);
+    advance(body, { forward: 1 }, 0.55);
+    expect(body.position.y).toBeCloseTo(0.18);
+    expect(body.grounded).toBe(true);
+    advance(body, { forward: 1 }, 1);
+    expect(body.position.y).toBeCloseTo(0);
+  });
+  it('cannot climb a wall or rise into a low ceiling', () => {
+    const wall = player([box(0, 1, 2, 3, 2, 1)]);
+    advance(wall, { forward: 1 }, 1);
+    expect(wall.position.z).toBeLessThan(1.3);
+    const ceiling = player([box(0, 0.1, 2, 3, 0.2, 2), box(0, 1.95, 2, 3, 0.2, 2)]);
+    advance(ceiling, { forward: 1 }, 1);
+    expect(ceiling.position.z).toBeLessThan(0.71);
+    expect(ceiling.position.y).toBeCloseTo(0);
   });
 });

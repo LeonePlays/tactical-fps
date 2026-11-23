@@ -1,3 +1,4 @@
+import { syncCapturedMouse } from './actions';
 import { test, expect } from '@playwright/test';
 import { accountFixture } from './account-fixture';
 test('classic HUD has a radar, finite reserves, purchase feedback, deploy delay and wall impacts', async ({
@@ -8,6 +9,7 @@ test('classic HUD has a radar, finite reserves, purchase feedback, deploy delay 
   await page.goto('/');
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
   await page.locator('#start-button').click();
+  await syncCapturedMouse(page);
   await expect(page.locator('#hud')).toBeVisible();
   await expect(page.locator('#reserve-count')).toHaveText('90');
   await expect(page.locator('#money-count')).toHaveText('$16000');
@@ -37,7 +39,7 @@ test('classic HUD has a radar, finite reserves, purchase feedback, deploy delay 
   await expect(page.locator('#ammo-count')).toHaveText('12');
   await expect(page.locator('#hud')).toHaveAttribute('data-deploying', 'false');
   // Look down at the industrial floor using native pointer-lock input.
-  await page.mouse.move(720, 850);
+  await page.mouse.move(720, 850, { steps: 6 });
   await page.mouse.down();
   await page.mouse.up();
   await expect(page.locator('#ammo-count')).toHaveText('11');
@@ -53,11 +55,14 @@ test('a locally simulated arena authorizes purchases and equips the bought carbi
   await accountFixture(page);
   await page.goto('/');
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
-  await page.locator('.local-lobby summary').click();
+  await page.locator('#match-mode').selectOption('defuse');
   await page.locator('#room-bots').selectOption('0');
   await page.locator('#local-bots').click();
   await expect(page.locator('#hud')).toHaveAttribute('data-room', 'LOCAL');
+  await expect(page.locator('#start-button')).toBeEnabled();
   await page.locator('#start-button').click();
+  await syncCapturedMouse(page);
+  await expect(page.locator('#hud')).toBeVisible();
   await expect(page.locator('#ammo-count')).toHaveText('12');
   await expect(page.locator('#money-count')).toHaveText('$4000');
   await page.keyboard.press('b');

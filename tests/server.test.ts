@@ -2,7 +2,7 @@ import { test, expect } from 'vitest';
 import { WebSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
 import { createMatchServer } from '../server/server';
-import type { MatchState } from '../src/network/protocol';
+import { PROTOCOL_VERSION, type MatchState } from '../src/network/protocol';
 const waitMessage = (ws: WebSocket) =>
   new Promise<Record<string, unknown>>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Socket timeout')), 3000);
@@ -28,19 +28,38 @@ test('two real sockets join one room with bots; invalid tokens fail; empty rooms
   try {
     const bad = await connect();
     const denied = waitMessage(bad);
-    bad.send(JSON.stringify({ type: 'join', protocol: 3, token: 'bad', create: true, bots: 0 }));
+    bad.send(
+      JSON.stringify({
+        type: 'join',
+        protocol: PROTOCOL_VERSION,
+        token: 'bad',
+        create: true,
+        bots: 0,
+      }),
+    );
     expect((await denied).type).toBe('error');
     const first = await connect();
     const created = waitMessage(first);
     first.send(
-      JSON.stringify({ type: 'join', protocol: 3, token: 'valid-one', create: true, bots: 2 }),
+      JSON.stringify({
+        type: 'join',
+        protocol: PROTOCOL_VERSION,
+        token: 'valid-one',
+        create: true,
+        bots: 2,
+      }),
     );
     const state = (await created) as unknown as MatchState;
     expect(state.actors).toHaveLength(3);
     const second = await connect();
     const joined = waitMessage(second);
     second.send(
-      JSON.stringify({ type: 'join', protocol: 3, token: 'valid-two', room: state.room }),
+      JSON.stringify({
+        type: 'join',
+        protocol: PROTOCOL_VERSION,
+        token: 'valid-two',
+        room: state.room,
+      }),
     );
     const snapshot = (await joined) as unknown as MatchState;
     expect(snapshot.room).toBe(state.room);

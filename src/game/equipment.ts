@@ -96,29 +96,42 @@ export function launchGrenade(
 
 /** Pure shared inventory: no ammo can be granted by replaying an attack sequence. */
 export class EquipmentInventory {
-  private count = 1;
+  private slots: [boolean, boolean] = [true, false];
   private sequence = 0;
   private knifeReady = 0;
   private throwReady = 0;
   get grenades() {
-    return this.count;
+    return Number(this.slots[0]) + Number(this.slots[1]);
+  }
+  get grenadeSlots(): [boolean, boolean] {
+    return [...this.slots];
+  }
+  set grenadeSlots(value: [boolean, boolean]) {
+    this.slots = [value[0] === true, value[1] === true];
   }
   set grenades(value: number) {
-    this.count = Number.isFinite(value) ? Math.max(0, Math.min(1, Math.floor(value))) : 0;
+    const count = Number.isFinite(value) ? Math.max(0, Math.min(2, Math.floor(value))) : 0;
+    this.slots = [count >= 1, count >= 2];
   }
   /** Call when changing tools or respawning to consume an already-observed button press. */
   observe(sequence: number): void {
     if (Number.isSafeInteger(sequence)) this.sequence = Math.max(this.sequence, sequence);
   }
   reset(sequence = 0): void {
-    this.count = 1;
+    this.slots = [true, false];
     this.sequence = Math.max(0, sequence);
     this.knifeReady = 0;
     this.throwReady = 0;
   }
   addGrenade(): boolean {
-    if (this.count >= 1) return false;
-    this.count++;
+    const slot = this.slots.findIndex((occupied) => !occupied);
+    if (slot < 0) return false;
+    this.slots[slot] = true;
+    return true;
+  }
+  dropGrenade(slot: 0 | 1 = 0): boolean {
+    if (!this.slots[slot]) return false;
+    this.slots[slot] = false;
     return true;
   }
   private pressed(sequence: number): boolean {
@@ -138,10 +151,16 @@ export class EquipmentInventory {
     origin: Vec3,
     direction: Vec3,
     solids: readonly Solid[] = [],
+    slot: 0 | 1 = 0,
   ): GrenadeProjectile | null {
-    if (!this.pressed(sequence) || !Number.isFinite(now) || now < this.throwReady || !this.count)
+    if (
+      !this.pressed(sequence) ||
+      !Number.isFinite(now) ||
+      now < this.throwReady ||
+      !this.slots[slot]
+    )
       return null;
-    this.count--;
+    this.slots[slot] = false;
     this.throwReady = now + 0.8;
     return launchGrenade(origin, direction, solids);
   }

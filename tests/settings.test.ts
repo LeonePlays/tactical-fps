@@ -22,6 +22,7 @@ describe('persisted user settings', () => {
         }),
       ),
     ).toEqual({
+      ...DEFAULT_SETTINGS,
       sensitivity: 3,
       fov: 65,
       volume: 0,
@@ -33,6 +34,7 @@ describe('persisted user settings', () => {
   });
   it('loads a valid saved configuration', () => {
     const settings = {
+      ...DEFAULT_SETTINGS,
       sensitivity: 1.8,
       fov: 95,
       volume: 0.5,
@@ -48,5 +50,23 @@ describe('persisted user settings', () => {
       ...DEFAULT_SETTINGS,
       volume: 0.2,
     });
+  });
+  it('migrates the previous settings while retaining master volume and adding independent channels', () => {
+    const settings = parseSettings('{"volume":0.4,"quality":"low","invertY":true}');
+    expect(settings.volume).toBe(0.4);
+    expect(settings.effectsVolume).toBe(1);
+    expect(settings.musicVolume).toBe(0.15);
+    expect(settings.renderScale).toBe(1);
+    expect(settings.shadows).toBe('high');
+    expect(settings.quality).toBe('low');
+    expect(settings.invertY).toBe(true);
+  });
+  it('validates graphics and audio sliders without accepting nonnumeric values', () => {
+    expect(
+      parseSettings('{"effectsVolume":3,"musicVolume":-1,"renderScale":4,"shadows":"off"}'),
+    ).toMatchObject({ effectsVolume: 1, musicVolume: 0, renderScale: 1.5, shadows: 'off' });
+    expect(
+      parseSettings('{"effectsVolume":null,"musicVolume":"0","renderScale":0,"shadows":"ultra"}'),
+    ).toMatchObject({ effectsVolume: 1, musicVolume: 0.15, renderScale: 0.5, shadows: 'high' });
   });
 });

@@ -89,4 +89,117 @@ describe('original low-poly actor models', () => {
     model.update({ ...state, team: 'bravo' });
     expect(jacket.material).not.toBe(humanJacket.material);
   });
+  it('uses sculpted geometry and renders the authoritative equipment selection', () => {
+    const { model, state, frames } = setup();
+    const jacket = model.root.getChildMeshes().find((mesh) => mesh.name === 'operator-jacket')!;
+    expect(jacket.getTotalVertices()).toBeGreaterThan(24);
+    const nodes = model.root.getChildTransformNodes();
+    const rifle = nodes.find((node) => node.name === 'operator-rifle')!;
+    const pistol = nodes.find((node) => node.name === 'operator-sidearm')!;
+    const knife = nodes.find((node) => node.name === 'operator-held-knife')!;
+    const grenade = nodes.find((node) => node.name === 'operator-held-grenade')!;
+    model.update({ ...state, tool: 'firearm', weapon: 'secondary' });
+    frames();
+    expect(pistol.isEnabled()).toBe(true);
+    expect(rifle.isEnabled()).toBe(false);
+    model.update({ ...state, tool: 'knife' });
+    expect(knife.isEnabled()).toBe(true);
+    expect(pistol.isEnabled()).toBe(false);
+    model.update({ ...state, tool: 'grenade', grenades: 1 });
+    expect(grenade.isEnabled()).toBe(true);
+    expect(knife.isEnabled()).toBe(false);
+    model.update({ ...state, tool: 'grenade', grenades: 0 });
+    expect(grenade.isEnabled()).toBe(false);
+  });
+  it('aims with pitch, animates confirmed shots once, and reaches for the magazine on reload', () => {
+    const { model, state, frames } = setup();
+    const nodes = model.root.getChildTransformNodes();
+    const head = nodes.find((node) => node.name === 'operator-head')!;
+    const magazine = nodes.find((node) => node.name === 'operator-rifle-magazine')!;
+    const flash = model.root
+      .getChildMeshes()
+      .find((mesh) => mesh.name === 'operator-muzzle-flash')!;
+    model.update({ ...state, tool: 'firearm', weapon: 'primary', pitch: 0.5 });
+    frames();
+    expect(head.rotation.x).toBeGreaterThan(0.3);
+    expect(flash.isEnabled()).toBe(false);
+    model.update({ ...state, tool: 'firearm', weapon: 'primary', shots: state.shots + 1 });
+    frames(1);
+    expect(flash.isEnabled()).toBe(true);
+    frames(20);
+    expect(flash.isEnabled()).toBe(false);
+    model.update({
+      ...state,
+      tool: 'firearm',
+      weapon: 'primary',
+      weaponState: { ...state.weaponState, reloadRemaining: 1.225 },
+    });
+    frames();
+    expect(magazine.position.y).toBeLessThan(-0.18);
+    expect(flash.isEnabled()).toBe(false);
+  });
+  it('keeps planted boots level and on the ground while crouching, with attached belt equipment', () => {
+    const { model, state, frames } = setup();
+    const nodes = model.root.getChildTransformNodes();
+    const ankles = nodes.filter((node) => node.name.startsWith('operator-ankle-'));
+    const belt = nodes.find((node) => node.name === 'operator-belt-equipment')!;
+    model.update({ ...state, grounded: true, velocity: { x: 0, y: 0, z: 0 } });
+    frames();
+    for (const ankle of ankles) {
+      ankle.computeWorldMatrix(true);
+      expect(ankle.getAbsolutePosition().y - model.root.position.y).toBeCloseTo(0.085, 2);
+    }
+    const standingBelt = belt.position.y;
+    model.update({ ...state, stance: 'crouching', grounded: true, velocity: { x: 0, y: 0, z: 0 } });
+    frames();
+    for (const ankle of ankles) {
+      ankle.computeWorldMatrix(true);
+      expect(ankle.getAbsolutePosition().y - model.root.position.y).toBeCloseTo(0.085, 2);
+      const knee = ankle.parent as import('@babylonjs/core/Meshes/transformNode').TransformNode;
+      const hip = knee.parent as import('@babylonjs/core/Meshes/transformNode').TransformNode;
+      expect(ankle.rotation.x + knee.rotation.x + hip.rotation.x).toBeCloseTo(0, 4);
+    }
+    expect(belt.position.y).toBeLessThan(standingBelt - 0.3);
+  });
+  it('restores deterministic appearance and shows class-specific remote weapon silhouettes', () => {
+    const { scene, model, state, frames } = setup();
+    const other = createActor(scene, false);
+    model.update(state);
+    other.update(state);
+    expect(model.root.metadata).toEqual(other.root.metadata);
+    const nodes = model.root.getChildTransformNodes();
+    const scope = nodes.find((node) => node.name === 'operator-rifle-scope')!;
+    const rifle = nodes.find((node) => node.name === 'operator-rifle')!;
+    const drum = nodes.find((node) => node.name === 'operator-lmg-drum')!;
+    const bomb = nodes.find((node) => node.name === 'operator-held-bomb')!;
+    model.update({
+      ...state,
+      weaponState: {
+        ...state.weaponState,
+        inventory: {
+          ...state.weaponState.inventory,
+          primary: { ...state.weaponState.inventory.primary, weaponId: 'sr8' },
+        },
+      },
+    });
+    frames();
+    expect(scope.isEnabled()).toBe(true);
+    expect(rifle.scaling.z).toBeGreaterThan(1.3);
+    model.update({
+      ...state,
+      weaponState: {
+        ...state.weaponState,
+        inventory: {
+          ...state.weaponState.inventory,
+          primary: { ...state.weaponState.inventory.primary, weaponId: 'lmg60' },
+        },
+      },
+    });
+    expect(scope.isEnabled()).toBe(false);
+    expect(drum.isEnabled()).toBe(true);
+    model.update({ ...state, tool: 'bomb' });
+    expect(bomb.isEnabled()).toBe(true);
+    expect(rifle.isEnabled()).toBe(false);
+    other.dispose();
+  });
 });

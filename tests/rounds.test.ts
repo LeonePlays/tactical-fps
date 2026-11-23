@@ -255,3 +255,67 @@ it('resolves simultaneous elimination according to whether the bomb is planted',
   active.game.step(0.05, active.actors);
   expect(active.game.snapshot().winner).toBe('alpha');
 });
+
+describe('configurable FFA and team deathmatch', () => {
+  it('uses the configured individual elimination limit and clears it on restart', () => {
+    const game = new RoundController('deathmatch', { scoreLimit: 2, timeLimit: 30 });
+    const actors = roster();
+    actors[0].kills = 1;
+    game.step(0.05, actors);
+    expect(game.snapshot().phase).toBe('active');
+    actors[0].kills = 2;
+    game.step(0.05, actors);
+    expect(game.snapshot()).toMatchObject({ winnerId: 'player', phase: 'round-over' });
+    game.restart();
+    expect(game.snapshot()).toMatchObject({ remaining: 30, winnerId: null, phase: 'active' });
+  });
+
+  it('retains team points independently from the connected roster', () => {
+    const game = new RoundController('team-deathmatch', { scoreLimit: 3, timeLimit: 30 });
+    game.recordKill('bravo');
+    game.step(0.05, roster().slice(0, 1));
+    expect(game.snapshot().scores).toEqual({ alpha: 0, bravo: 1 });
+    game.recordKill('bravo');
+    game.recordKill('bravo');
+    game.step(0.05, []);
+    expect(game.snapshot()).toMatchObject({ winner: 'bravo', winnerId: null, phase: 'round-over' });
+    advance(game, 5, []);
+    expect(game.snapshot().phase).toBe('match-over');
+    game.recordKill('alpha');
+    expect(game.snapshot().scores.alpha).toBe(0);
+    game.restart();
+    expect(game.snapshot()).toMatchObject({ scores: { alpha: 0, bravo: 0 }, remaining: 30 });
+  });
+
+  it('awards the leading team at timeout and reports an honest draw', () => {
+    const leading = new RoundController('team-deathmatch', { timeLimit: 30 });
+    leading.recordKill('alpha');
+    advance(leading, 30, roster());
+    expect(leading.snapshot()).toMatchObject({ winner: 'alpha', phase: 'round-over' });
+    const tied = new RoundController('team-deathmatch', { timeLimit: 30 });
+    tied.recordKill('alpha');
+    tied.recordKill('bravo');
+    advance(tied, 30, roster());
+    expect(tied.snapshot()).toMatchObject({
+      winner: null,
+      winnerId: null,
+      reason: 'Empate entre equipes.',
+    });
+  });
+
+  it('accepts a map-specific planting site and custom defuse round limits', () => {
+    const site = { x: 1, y: 0, z: 12 };
+    const actors = roster();
+    actors[0].position = site;
+    const game = new RoundController('defuse', { bombSite: site, timeLimit: 30, scoreLimit: 1 });
+    advance(game, 5, actors);
+    advance(game, 3, actors, ['player']);
+    expect(game.snapshot().bomb).toMatchObject({ status: 'planted', position: site });
+    advance(game, 35, actors);
+    expect(game.snapshot()).toMatchObject({
+      winner: 'alpha',
+      scores: { alpha: 1, bravo: 0 },
+      phase: 'match-over',
+    });
+  });
+});

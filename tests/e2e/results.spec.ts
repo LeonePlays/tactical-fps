@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { Match } from '../../src/game/match';
 import { PROTOCOL_VERSION } from '../../src/network/protocol';
 import { accountFixture } from './account-fixture';
+import { openServers, syncCapturedMouse } from './actions';
 
 test('a completed server match shows the result and returns to playable training', async ({
   page,
@@ -36,17 +37,19 @@ test('a completed server match shows the result and returns to playable training
   });
   await page.goto('/');
   await expect(page.locator('#start-button')).toBeEnabled({ timeout: 40000 });
-  await page.locator('.local-lobby summary').click();
+  await openServers(page);
   await page.locator('#room-server').fill('ws://match.test/');
   await page.locator('#create-room').click();
   await expect(page.locator('#hud')).toHaveAttribute('data-room', 'ABC123');
   await expect(page.locator('#start-button')).toBeEnabled();
   await page.locator('#start-button').click();
+  await syncCapturedMouse(page);
   await expect(page.locator('#hud')).toBeVisible();
   await page.mouse.down();
   await page.mouse.up();
   await expect(page.locator('#result-overlay')).toBeVisible();
-  await expect(page.locator('#result-score')).toContainText('VOCÊ: 10 eliminações');
+  await expect(page.locator('#result-title')).toHaveText('Visitante VENCEU');
+  await expect(page.locator('#result-score')).toContainText('Visitante: 10 / 0');
   await expect(page.locator('#pause-overlay')).toBeHidden();
   await expect(page.locator('#menu-shell')).toBeHidden();
   await expect(page.locator('#rematch')).toBeHidden();
@@ -54,6 +57,7 @@ test('a completed server match shows the result and returns to playable training
   await expect(page.locator('#result-overlay')).toBeHidden();
   await expect(page.locator('#start-label')).toHaveText('INICIAR TREINO');
   await page.locator('#start-button').click();
+  await syncCapturedMouse(page);
   await expect(page.locator('#hud')).toBeVisible();
   await expect(page.locator('#hud')).not.toHaveAttribute('data-room');
 });
