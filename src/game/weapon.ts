@@ -7,6 +7,8 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Scene } from '@babylonjs/core/scene';
 import type { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera';
+import { GUNS, type WeaponId } from './ballistics';
+import { buildWeaponVariant, type VariantPose } from './weapon-variants';
 
 interface WeaponAnimation {
   body: TransformNode;
@@ -17,6 +19,8 @@ interface WeaponAnimation {
   actionBase: Vector3;
   handBase: Vector3;
   pistol: boolean;
+  id: WeaponId;
+  reloadDuration: number;
   reloadStart: number;
   deployStart: number;
   lastTime: number;
@@ -26,11 +30,19 @@ interface WeaponAnimation {
 const animations = new WeakMap<TransformNode, WeaponAnimation>();
 
 /** Original faceted view models; moving assemblies stay separate from material batches. */
-export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = false): TransformNode {
+export function createWeapon(
+  scene: Scene,
+  camera: UniversalCamera,
+  pistol = false,
+  weaponId?: WeaponId,
+): TransformNode {
+  const id = weaponId ?? (pistol ? 'p09' : 't04');
+  pistol = GUNS[id].slot === 'secondary';
   const root = new TransformNode(pistol ? 'pistol-view' : 'carbine', scene);
   root.parent = camera;
   root.position = new Vector3(0.23, -0.24, 0.55);
   root.scaling.setAll(0.65);
+  root.metadata = { weaponId: id, category: GUNS[id].kind };
   const material = (name: string, color: string, shine = 0.1) => {
     const cached = scene.getMaterialByName(name) as StandardMaterial | null;
     if (cached) return cached;
@@ -47,6 +59,10 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
   const glove = material('view-tactical-gloves', '#827d65', 0.03);
   const fabric = material('view-operator-sleeves', '#52624b', 0.025);
   const sight = material('view-iron-sight-dot', '#cfdb9a', 0.08);
+  const wood = material('view-walnut-furniture', '#785033', 0.12);
+  const brass = material('view-brass-cartridges', '#a98b48', 0.58);
+  const glass = material('view-coated-optic-glass', '#315a65', 0.8);
+  glass.emissiveColor.set(0.015, 0.04, 0.05);
   sight.emissiveColor.set(0.16, 0.2, 0.08);
   const body = new TransformNode('weapon-body-assembly', scene);
   const magazine = new TransformNode('weapon-magazine', scene);
@@ -211,7 +227,24 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
     cylinder('glove-cuff', 0.135, 0.045, rubber, [0, -0.035, -0.07], hand);
   }
 
-  if (pistol) {
+  let variant: VariantPose | undefined;
+  if (!pistol && id !== 't04') {
+    variant = buildWeaponVariant(id, {
+      body,
+      magazine,
+      action,
+      steel,
+      edge,
+      polymer,
+      rubber,
+      wood,
+      brass,
+      glass,
+      bevel,
+      profile,
+      cylinder,
+    });
+  } else if (pistol) {
     bevel('pistol-slide-shell', 0.078, 0.075, 0.325, steel, [0, 0, 0], action, 0.014);
     bevel('pistol-slide-top', 0.057, 0.014, 0.27, edge, [0, 0.039, 0.005], action, 0.003);
     bevel(
@@ -269,6 +302,39 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
       bevel('pistol-rear-sight', 0.014, 0.023, 0.022, rubber, [side * 0.023, 0.05, -0.12], action);
     bevel('pistol-front-sight', 0.012, 0.022, 0.018, rubber, [0, 0.05, 0.14], action);
     bevel('pistol-sight-dot', 0.007, 0.009, 0.004, sight, [0, 0.053, 0.129], action, 0.001);
+    if (id === 'p45') {
+      bevel('p45-beveled-long-slide', 0.085, 0.08, 0.14, edge, [0, 0, 0.155], action, 0.017);
+      cylinder('p45-threaded-muzzle', 0.043, 0.055, steel, [0, 0, 0.25], action);
+      cylinder('p45-dark-muzzle', 0.028, 0.003, rubber, [0, 0, 0.28], action);
+      bevel(
+        'p45-extended-magazine-floorplate',
+        0.083,
+        0.055,
+        0.08,
+        polymer,
+        [0, -0.09, 0],
+        magazine,
+      );
+      for (let i = 0; i < 3; i++)
+        cylinder('p45-grip-fastener', 0.01, 0.08, edge, [0, -0.105 - i * 0.038, -0.1], body, 'x');
+    } else if (id === 'p22') {
+      // A shorter slide, slim frame and compact magazine form an independent silhouette.
+      action.scaling.set(0.92, 0.92, 0.76);
+      body.scaling.z = 0.84;
+      magazine.scaling.y = 0.78;
+      bevel('p22-front-grip-band', 0.08, 0.032, 0.07, rubber, [0, -0.17, -0.11]);
+      for (const x of [-0.028, 0.028])
+        bevel(
+          'p22-compact-sight-dot',
+          0.007,
+          0.008,
+          0.004,
+          sight,
+          [x, 0.052, -0.13],
+          action,
+          0.001,
+        );
+    }
   } else {
     bevel('carbine-upper-receiver', 0.095, 0.11, 0.36, steel, [0, 0.022, 0.015], body, 0.022);
     bevel('carbine-lower-receiver', 0.085, 0.075, 0.27, polymer, [0, -0.057, -0.025], body, 0.014);
@@ -376,13 +442,21 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
   action.parent = body;
   triggerHand.parent = root;
   supportHand.parent = root;
-  magazine.position.set(0, pistol ? -0.145 : -0.14, pistol ? -0.09 : 0.035);
-  action.position.set(pistol ? 0 : -0.052, pistol ? 0.043 : 0.032, pistol ? 0.033 : -0.005);
+  magazine.position.set(
+    0,
+    variant?.magazineY ?? (pistol ? -0.145 : -0.14),
+    variant?.magazineZ ?? (pistol ? -0.09 : 0.035),
+  );
+  action.position.set(
+    pistol || id === 'sg12' ? 0 : -0.052,
+    variant?.actionY ?? (pistol ? 0.043 : 0.032),
+    variant?.actionZ ?? (pistol ? 0.033 : -0.005),
+  );
   triggerHand.position.set(0.035, pistol ? -0.17 : -0.185, pistol ? -0.105 : -0.15);
   supportHand.position.set(
     pistol ? -0.06 : -0.035,
     pistol ? -0.16 : -0.095,
-    pistol ? -0.055 : 0.29,
+    variant?.supportZ ?? (pistol ? -0.055 : 0.29),
   );
   const flash = MeshBuilder.CreateSphere(
     'muzzle-flash',
@@ -390,7 +464,11 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
     scene,
   );
   flash.parent = body;
-  flash.position.set(0, pistol ? 0.043 : 0.015, pistol ? 0.26 : 0.78);
+  flash.position.set(
+    0,
+    variant?.muzzleY ?? (pistol ? 0.043 : 0.015),
+    variant?.muzzleZ ?? (id === 'p45' ? 0.34 : id === 'p22' ? 0.21 : pistol ? 0.26 : 0.78),
+  );
   flash.scaling.set(0.8, 0.65, 1.7);
   const fire = material('view-muzzle-flame', '#ffbd61', 0);
   fire.emissiveColor.set(1, 0.58, 0.12);
@@ -409,6 +487,8 @@ export function createWeapon(scene: Scene, camera: UniversalCamera, pistol = fal
     actionBase: action.position.clone(),
     handBase: supportHand.position.clone(),
     pistol,
+    id,
+    reloadDuration: GUNS[id].reload,
     reloadStart: 0,
     deployStart: 0,
     lastTime: -1,
@@ -437,7 +517,7 @@ export function animateWeapon(
   state.lastTime = time;
   state.wasReloading = reloading;
   state.wasDeploying = deploying;
-  const duration = state.pistol ? 2.2 : 2.45;
+  const duration = state.reloadDuration;
   const progress = reloading ? Math.max(0, Math.min(1, (time - state.reloadStart) / duration)) : 0;
   const lift = reloading ? Math.sin(progress * Math.PI) : 0;
   const magazineTravel = reloading
@@ -445,16 +525,19 @@ export function animateWeapon(
     : 0;
   const punch = Number.isFinite(recoil) ? Math.max(0, Math.min(1, recoil)) : 0;
   state.magazine.position.copyFrom(state.magazineBase);
-  state.magazine.position.y -= magazineTravel * (state.pistol ? 0.24 : 0.31);
+  const tubeFed = state.id === 'sg12';
+  state.magazine.position.y -= magazineTravel * (tubeFed ? 0.07 : state.pistol ? 0.24 : 0.31);
   state.magazine.position.x -= magazineTravel * 0.07;
   state.magazine.rotation.set(-magazineTravel * 0.2, 0, -magazineTravel * 0.18);
   state.action.position.copyFrom(state.actionBase);
   state.action.position.z -= punch * (state.pistol ? 0.045 : 0.055);
+  if (tubeFed) state.action.position.z -= punch * 0.11;
   if (reloading && progress > 0.85)
     state.action.position.z -= Math.sin(((progress - 0.85) / 0.15) * Math.PI) * 0.04;
   state.hand.position.copyFrom(state.handBase);
   state.hand.position.y -= magazineTravel * 0.22;
   state.hand.position.z -= lift * (state.pistol ? 0.02 : 0.2);
+  if (tubeFed && !reloading) state.hand.position.z -= punch * 0.11;
   state.hand.position.x -= lift * 0.035;
   state.hand.rotation.set(lift * 0.4, 0, lift * -0.16);
   const deploy = deploying ? Math.exp(-Math.max(0, time - state.deployStart) * 5) : 0;

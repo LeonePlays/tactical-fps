@@ -26,7 +26,7 @@ export function renderView(root: HTMLElement): void {
       <div class="menu-content">
         <header class="topbar">
           <a href="#" class="wordmark" data-action="home">TACTICAL<span>FPS</span><small>INDEPENDENT TACTICAL EXPERIENCE</small></a>
-          <div class="topbar-right"><span class="status-dot"></span> SESSÃO LOCAL <span class="version">BETA 0.4.1</span></div>
+          <div class="topbar-right"><span class="status-dot"></span> SESSÃO LOCAL <span class="version">BETA 0.5</span></div>
         </header>
         <nav class="tabs" aria-label="Menu">
           <button class="active" data-action="play-tab">JOGAR <span>01</span></button>
@@ -36,8 +36,8 @@ export function renderView(root: HTMLElement): void {
         <main class="hero">
           <div class="eyebrow"><span class="tiny-line"></span> BETA JOGÁVEL <span class="tag">SEM CADASTRO PARA TREINO E BOTS</span></div>
           <h1>TACTICAL<br><em>FPS.</em></h1>
-          <p class="hero-description">Precisão. Movimento. Decisão.<br>Escolha o terreno e entre na partida.</p>
-          <div class="operation-info"><span class="operation-number">04</span><div><span class="label">MAPA SELECIONADO</span><strong id="selected-map-name">COMPLEXO FERRO</strong><span id="selected-map-description" class="subtle">Pátio industrial · corredores e cobertura de carga</span></div></div>
+          <p class="hero-description">20 terrenos. 10 armas. Uma decisão.<br>Monte seu equipamento e entre na partida.</p>
+          <div class="operation-info"><span class="operation-number">05</span><div><span class="label">MAPA SELECIONADO</span><strong id="selected-map-name">COMPLEXO FERRO</strong><span id="selected-map-description" class="subtle">Pátio industrial · corredores e cobertura de carga</span></div></div>
           <div class="mode-line"><span class="status-dot"></span><span>PARTIDAS LOCAIS DISPONÍVEIS</span><span class="mode-divider">/</span><span>SEM CADASTRO</span></div>
           <button id="quick-play" class="button primary start-button" data-action="quick-play">JOGAR AGORA · BOTS</button><button id="start-button" class="button secondary training-button" data-action="start" disabled><span id="start-label">PREPARANDO CAMPO</span>${arrow}</button>
           <p id="start-help" class="start-help" role="status">Carregando o motor 3D…</p>
@@ -45,7 +45,7 @@ export function renderView(root: HTMLElement): void {
         <section class="map-card" aria-label="Informações do campo de treino">
           <div class="map-card-top"><span class="label">RECONHECIMENTO DO TERRENO</span>${crosshair}</div>
           <div class="map-diagram" aria-hidden="true"><div class="map-grid"></div><span class="map-block a"></span><span class="map-block b"></span><span class="map-block c"></span><span class="map-block d"></span><span class="map-path"></span><span class="map-you"></span><span class="map-north">N ↑</span></div>
-          <div class="map-card-bottom"><span><b>02</b> MAPAS</span><span><b>03</b> MODOS</span><span class="map-live">OFFLINE</span></div>
+          <div class="map-card-bottom"><span><b>20</b> MAPAS</span><span><b>10</b> ARMAS</span><span class="map-live">OFFLINE</span></div>
         </section>
         <footer class="menu-footer"><div><span class="footer-label">TACTICAL FPS · BETA</span><span>Conteúdo original. Jogue com teclado e mouse.</span></div><div class="desktop-badge">${keyboard} EXCLUSIVO PARA COMPUTADOR</div></footer>
       </div>

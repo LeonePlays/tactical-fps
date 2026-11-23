@@ -119,8 +119,110 @@
   color: #b5bfa8;
 }
 .match-fields label:first-child,
-.match-fields label:nth-child(2) {
+.match-fields label:has(#match-mode),
+.mission-preview {
   grid-column: 1 / -1;
+}
+.mission-preview {
+  display: grid;
+  grid-template-columns: minmax(110px, 44%) 1fr;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #819e7d35;
+  background: #0f1915;
+}
+.mission-preview canvas {
+  display: block;
+  width: 100%;
+  height: 128px;
+  object-fit: contain;
+  border-right: 1px solid #819e7d35;
+}
+.mission-preview > div {
+  padding: 12px 10px 10px 0;
+  min-width: 0;
+}
+.map-theme {
+  color: #d8cc94;
+  font: 8px monospace;
+  letter-spacing: 1.4px;
+}
+#map-description {
+  color: #b9c6b5;
+  font-size: 9px;
+  line-height: 1.5;
+  margin: 7px 0;
+}
+#map-dimensions {
+  display: block;
+  color: #819c88;
+  font: 8px/1.5 monospace;
+}
+.map-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  color: #b4c9ae;
+  font: 9px monospace;
+}
+.map-stepper button {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #7e997966;
+  color: #d0e4bd;
+  background: #24382b;
+}
+.map-stepper button:hover,
+.map-stepper button:focus-visible {
+  background: #3b5039;
+  border-color: #c0cc98;
+}
+.loadout-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-width: 0;
+  gap: 12px;
+  border: 0;
+  border-top: 1px solid #829b713b;
+  padding: 15px 0 0;
+  margin: 22px 0 0;
+}
+.loadout-fields legend {
+  color: #c8d1ac;
+  font: 9px monospace;
+  letter-spacing: 1.5px;
+  padding: 0 10px 0 0;
+}
+.local-lobby .loadout-fields label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+  color: #b5bfa8;
+  font-size: 10px;
+}
+.loadout-fields small {
+  color: #94ac8c;
+  font: 8px/1.7 monospace;
+}
+.loadout-fields > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #82997e;
+  font-size: 9px;
+  line-height: 1.6;
+}
+.match-actions {
+  position: sticky;
+  bottom: -24px;
+  margin: 0 -12px -12px;
+  padding: 9px 12px 12px;
+  background: linear-gradient(#152019ef, #101a13 25%);
+  border-top: 1px solid #7e99792e;
 }
 .local-lobby input,
 .local-lobby select {

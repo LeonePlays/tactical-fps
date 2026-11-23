@@ -1,4 +1,5 @@
-import type { MapId } from './match-config';
+import type { MapId } from './map-catalog';
+import { createAdditionalMaps } from './map-layouts';
 import { box, type Solid, type Vec3 } from './physics';
 import { ARENA_BLOCKS, ARENA_SOLIDS, SPAWNS } from '../network/arena';
 
@@ -72,6 +73,7 @@ block('courtyard-planter-west', -19.7, 0.45, 12.5, 2.2, 0.9, 2.2);
 block('courtyard-planter-east', 19.7, 0.45, -11, 2.2, 0.9, 2.2);
 
 export const MAPS: Readonly<Record<MapId, MapDefinition>> = {
+  ...createAdditionalMaps(),
   industrial: {
     id: 'industrial',
     name: 'Complexo Ferro',

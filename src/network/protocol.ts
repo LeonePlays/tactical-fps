@@ -3,8 +3,8 @@ import type { MatchConfig } from '../game/match-config';
 import type { WeaponState } from '../game/weapons';
 import { SHOP, type BuyItem } from '../game/shop';
 import type { MovementInput, Vec3 } from '../game/physics';
-import type { WeaponSlot } from '../game/ballistics';
-export const PROTOCOL_VERSION = 5 as const;
+import type { WeaponSlot, WeaponId } from '../game/ballistics';
+export const PROTOCOL_VERSION = 6 as const;
 export interface MatchInput extends MovementInput {
   tool: 'firearm' | 'knife' | 'grenade' | 'bomb';
   dropSequence: number;
@@ -50,6 +50,7 @@ export interface ActorState {
   deaths: number;
   ammo: number;
   weapon: WeaponSlot;
+  weaponId?: WeaponId;
 }
 export interface MatchState {
   protocol: typeof PROTOCOL_VERSION;
@@ -70,6 +71,7 @@ export interface DroppedItemState {
   position: Vec3;
   ammo?: number;
   reserve?: number;
+  weaponId?: WeaponId;
   expiresAt: number;
 }
 export const IDLE_INPUT: MatchInput = {

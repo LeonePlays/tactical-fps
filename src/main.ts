@@ -8,6 +8,7 @@ import { mountAccount } from './auth/account';
 import './styles/main.css';
 import './styles/classic.css';
 import './styles/menu.css';
+import './styles/optics.css';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from './core/settings';
 import { renderView } from './ui/view';
 import { mountMatchMenu } from './ui/match-menu';
@@ -32,7 +33,7 @@ if (!root) throw new Error('App root is missing');
 renderView(root);
 const buildBadge = document.createElement('span');
 buildBadge.className = 'build-badge';
-buildBadge.textContent = 'TACTICAL FPS · BETA 0.4.1';
+buildBadge.textContent = 'TACTICAL FPS · BETA 0.5';
 document.querySelector('.menu-footer')!.append(buildBadge);
 const el = <T extends HTMLElement = HTMLElement>(id: string) => {
   const node = document.getElementById(id);
@@ -230,6 +231,7 @@ async function enterGame(fresh = false): Promise<void> {
       saveTraining();
       game.reset();
     }
+    if (!roomReady) game.configureLoadout(matchMenu.getConfig());
     inSession = true;
     await game.enter();
     el('pause-message').textContent =

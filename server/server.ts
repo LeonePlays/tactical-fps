@@ -3,6 +3,8 @@ import { randomBytes } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Match } from './match';
 import { PROTOCOL_VERSION, parseInput } from '../src/network/protocol';
+import { MAP_CATALOG } from '../src/game/map-catalog';
+import { GUNS, type WeaponId } from '../src/game/ballistics';
 import {
   normalizeMatchConfig,
   playerName,
@@ -18,14 +20,19 @@ function strictConfig(value: unknown): Partial<MatchConfig> {
   const raw = value as Record<string, unknown>;
   const enums = {
     mode: ['deathmatch', 'team-deathmatch', 'defuse'],
-    map: ['industrial', 'old-quarter'],
+    map: MAP_CATALOG.map((map) => map.id),
+    primary: Object.keys(GUNS).filter((id) => GUNS[id as WeaponId].slot === 'primary'),
+    secondary: Object.keys(GUNS).filter((id) => GUNS[id as WeaponId].slot === 'secondary'),
     difficulty: ['easy', 'normal', 'hard'],
     team: ['auto', 'alpha', 'bravo'],
   };
   const ranges = { bots: [0, 4], timeLimit: [30, 1800], scoreLimit: [1, 100] };
   for (const [key, item] of Object.entries(raw)) {
     if (Object.hasOwn(enums, key)) {
-      if (typeof item !== 'string' || !enums[key as keyof typeof enums].includes(item))
+      if (
+        typeof item !== 'string' ||
+        !(enums[key as keyof typeof enums] as readonly string[]).includes(item)
+      )
         throw new Error(`Opção de partida inválida: ${key}.`);
     } else if (Object.hasOwn(ranges, key)) {
       const [min, max] = ranges[key as keyof typeof ranges];

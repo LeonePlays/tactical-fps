@@ -1,5 +1,5 @@
 import type { GameSnapshot } from '../game/game';
-import { WEAPONS } from '../game/ballistics';
+import { GUNS } from '../game/ballistics';
 import { EQUIPMENT } from '../game/equipment';
 import { rayBox } from '../network/arena';
 export class ClassicHud {
@@ -9,6 +9,7 @@ export class ClassicHud {
   private readonly crosshair: HTMLElement;
   private readonly ammoLabel: HTMLElement;
   private readonly scoreLabel: HTMLElement;
+  private readonly scope: HTMLElement;
   constructor(private readonly root: HTMLElement) {
     root.querySelectorAll<HTMLElement>('[id]').forEach((node) => this.nodes.set(node.id, node));
     this.radar = this.node('radar') as HTMLCanvasElement;
@@ -16,6 +17,12 @@ export class ClassicHud {
     this.crosshair = this.node('crosshair');
     this.ammoLabel = root.querySelector('.hud-ammo .label')!;
     this.scoreLabel = root.querySelector('.hud-score .label')!;
+    this.scope = document.createElement('div');
+    this.scope.id = 'scope-reticle';
+    this.scope.hidden = true;
+    this.scope.setAttribute('aria-hidden', 'true');
+    this.scope.innerHTML = '<i></i><b></b><span>TACTICAL OPTICS</span>';
+    root.append(this.scope);
   }
   private node(id: string) {
     return this.nodes.get(id)!;
@@ -26,6 +33,8 @@ export class ClassicHud {
   }
   update(state: GameSnapshot, showFps: boolean, kills?: number, dynamicCrosshair = true) {
     const firearm = state.tool === 'firearm';
+    this.scope.hidden = !state.scoped;
+    this.crosshair.hidden = state.scoped;
     this.text(
       'ammo-count',
       firearm
@@ -41,7 +50,10 @@ export class ClassicHud {
     this.text('armor-count', String(Math.ceil(state.armor)));
     this.text('money-count', `$${state.money}`);
     this.text('hit-count', String(kills ?? state.hits).padStart(2, '0'));
-    this.text('accuracy', state.shots ? `${Math.round((state.hits / state.shots) * 100)}%` : '—');
+    this.text(
+      'accuracy',
+      state.shots ? `${Math.min(100, Math.round((state.hits / state.shots) * 100))}%` : '—',
+    );
     this.text(
       'session-time',
       `${Math.floor(state.elapsed / 60)
@@ -91,7 +103,7 @@ export class ClassicHud {
     this.node('fps-counter').hidden = !showFps;
     this.node('hit-marker').hidden = !state.hit;
     this.ammoLabel.textContent = firearm
-      ? WEAPONS[state.weapon].name
+      ? GUNS[state.weaponId].name
       : state.tool === 'bomb'
         ? 'BOMBA · DISPOSITIVO'
         : EQUIPMENT[state.tool === 'knife' ? 'knife' : 'grenade'].name +
@@ -105,6 +117,21 @@ export class ClassicHud {
         : 'FORA DA ÁREA OU TEMPO DE COMPRA',
     );
     this.text('buy-message', state.buyMessage);
+    const purchases = this.node('buy-panel').querySelectorAll('li');
+    for (const [index, id] of [state.primaryId, state.secondaryId].entries()) {
+      const line = purchases[index];
+      if (line?.firstChild) line.firstChild.textContent = `${GUNS[id].name} `;
+      const price = line?.querySelector('b');
+      if (price) price.textContent = `$${GUNS[id].price}`;
+    }
+    for (const [index, size] of [
+      state.primaryMagazineSize,
+      state.secondaryMagazineSize,
+    ].entries()) {
+      const line = purchases[index + 2];
+      if (line?.firstChild)
+        line.firstChild.textContent = `Munição ${index ? 'secundária' : 'primária'} (${size}) `;
+    }
     const gap = !dynamicCrosshair
       ? 5
       : 4 +
@@ -115,6 +142,8 @@ export class ClassicHud {
     this.crosshair.style.setProperty('--gap', `${gap.toFixed(1)}px`);
     Object.assign(this.root.dataset, {
       tool: state.tool,
+      weaponId: state.weaponId,
+      scoped: String(state.scoped),
       aiming: String(state.aiming),
       flashlight: String(state.flashlight),
       equipmentSlot: String(state.equipmentSlot),

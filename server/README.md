@@ -1,4 +1,4 @@
-# Servidor de partidas — beta 0.4 / protocolo 5
+# Servidor de partidas — beta 0.5 / protocolo 6
 
 **Treino e bots offline não precisam deste servidor nem de conta.** No menu, configure a partida e use **CRIAR PARTIDA OFFLINE**. Este documento trata de salas reais entre jogadores, que exigem autenticação Supabase e um processo Node/WebSocket separado.
 
@@ -17,7 +17,7 @@ Em outro terminal:
 npm run dev
 ```
 
-Abra o frontend do Vite, escolha mapa, modo, bots, dificuldade e limites e entre com conta válida. Em **ENCONTRAR SERVIDORES**, informe `ws://127.0.0.1:3001`, consulte **ATUALIZAR SALAS** ou use **CRIAR SALA ONLINE**. A lista vem diretamente do processo informado. Também é possível informar o código para entrar. Quando a arena estiver pronta, clique em **ENTRAR NA PARTIDA** para capturar o mouse.
+Abra o frontend do Vite, escolha mapa, modo, bots, dificuldade, limites e primária/secundária e entre com conta válida. Em **ENCONTRAR SERVIDORES**, informe `ws://127.0.0.1:3001`, consulte **ATUALIZAR SALAS** ou use **CRIAR SALA ONLINE**. A configuração escolhida é enviada na criação da sala. A lista vem diretamente do processo informado. Também é possível informar o código para entrar. Quando a arena estiver pronta, clique em **ENTRAR NA PARTIDA** para capturar o mouse.
 
 Uma conta ocupa no máximo uma conexão por servidor. A sala comporta até oito participantes incluindo zero a quatro bots. Sair pelo menu desconecta o jogador. O anfitrião pode reiniciar a sala; quando sai, a função passa a outro humano conectado. Quando o último humano sai, a sala e os bots são removidos. Reiniciar o processo apaga todas as salas.
 
@@ -25,9 +25,11 @@ Durante a partida, T abre o chat da sala e Y o chat da equipe. Enter envia e Esc
 
 ## Regras compartilhadas
 
-Complexo Ferro e Bairro Antigo usam as mesmas definições de colisão, spawn, navegação e área de bomba no navegador e no servidor. FFA disputa pontos individuais; TDM mantém pontos por equipe mesmo após desconexões; bomba disputa vitórias de rodada. Alpha usa azul e Bravo tons de ferrugem nos modos de equipe. Aliados não causam dano entre si nesses modos; explosões próprias podem ferir quem as lançou.
+Os 20 mapas de `src/game/map-catalog.ts` usam as mesmas definições de colisão, spawn, navegação e área de bomba no navegador e no servidor. As 18 novas arenas estão em `map-layouts.ts`; Complexo Ferro e Bairro Antigo permanecem preservados. FFA disputa pontos individuais; TDM mantém pontos por equipe mesmo após desconexões; bomba disputa vitórias de rodada. Alpha usa azul e Bravo tons de ferrugem nos modos de equipe. Aliados não causam dano entre si nesses modos; explosões próprias podem ferir quem as lançou.
 
-FFA/TDM começam com carabina e pistola, reaparecem após três segundos e terminam por tempo/pontos. Bomba começa com pistola para humanos, permite compra e não reaparece dentro da rodada. Configuração aceita `deathmatch`, `team-deathmatch` ou `defuse`, mapa, dificuldade, 0–4 bots, preferência de equipe, tempo de 30–1800 s e limite de 1–100. Na bomba, tempo significa duração por rodada e limite significa vitórias; defaults de 90 s/3 vitórias. A preferência de equipe respeita balanceamento e vagas disponíveis.
+FFA/TDM começam com as armas `primary` e `secondary` da configuração, reaparecem após três segundos e terminam por tempo/pontos. Bomba começa com a secundária para humanos, permite comprar a primária escolhida com B → 1 e não reaparece dentro da rodada. Bots usam uma seleção determinística variada do catálogo. Configuração aceita `deathmatch`, `team-deathmatch` ou `defuse`, um dos 20 IDs de mapa, dificuldade, 0–4 bots, preferência de equipe, tempo de 30–1800 s e limite de 1–100. Na bomba, tempo significa duração por rodada e limite significa vitórias; defaults de 90 s/3 vitórias. A preferência de equipe respeita balanceamento e vagas disponíveis.
+
+As primárias aceitas são `t04`, `ar47`, `smg9`, `dmr14`, `sg12`, `sr8` e `lmg60`; secundárias são `p09`, `p45` e `p22`. Valores desconhecidos ou de slot incorreto são rejeitados na entrada de rede. A configuração padrão preserva T-04/P-09. `src/game/ballistics.ts` concentra as especificações e `WeaponController` resolve munição, recuo, dispersão, cadência e recarga. A SG-12 emite oito projéteis com verificação de colisão para cada um; dano tem queda por distância e nunca atravessa volumes sólidos. Identidade da arma e munição acompanham itens largados e recuperados.
 
 O servidor controla movimento, disparos, munição, compra, dano, mortes, pontos e regras. O cliente envia intenções, nunca posições ou acertos declarados. A reserva é finita; saldo, área de compra, colete e inventário são validados. Bots usam navegação por mapa e dificuldades reais. Pausar libera o mouse, mas a sala continua e o jogador pode receber dano.
 
@@ -51,7 +53,7 @@ O frontend aceita `VITE_MATCH_SERVER_URL` no build e endereço manual no menu. U
 - Chat: comando `chat` limita texto a 160 caracteres e frequência a uma mensagem a cada 750 ms; mensagens de equipe chegam somente aos colegas da mesma equipe. No modo sem equipes, use o chat global. Mensagens inválidas recebem aviso sem derrubar a conexão.
 - Configuração: comando `configure` aceita somente o anfitrião e opções validadas. Recria a partida com os humanos existentes e os bots solicitados, incrementando `matchId` para reconstruir o mapa e limpar o estado anterior nos clientes.
 
-O servidor consulta `/auth/v1/user` e revalida a conta a cada minuto. Atualização do token durante a conexão ainda não está implementada; após expirar, entre novamente com sessão renovada pelo SDK. Limites de payload/frequência, 16 salas e 128 jogadores são aplicados. Entradas antigas deixam de mover/interagir; conexões sem mensagens são removidas.
+O servidor consulta `/auth/v1/user` e revalida a conta a cada minuto. Atualização do token durante a conexão ainda não está implementada; após expirar, entre novamente com sessão renovada pelo SDK. Limites de payload/frequência, 16 salas e 128 jogadores são aplicados. Entradas antigas deixam de mover/interagir após 300 ms. Ping/pong WebSocket mantém a verificação da conexão durante pausa ou compilação/renderização da cena, sem manter comandos antigos de movimento; conexões sem resposta expiram.
 
 O último diagnóstico registrado do projeto Supabase fornecido era NXDOMAIN. Isso impede contas reais até restaurar/substituir o projeto; veja `supabase/README.md`. Não existe opção de autenticação falsa em `npm run server`.
 
@@ -72,4 +74,4 @@ Use processo Node persistente com suporte WebSocket, como VPS/container, e TLS/W
 
 Um processo mantém estado em memória; não escale horizontalmente sem afinidade/coordenação. Hospedagem pública, teste de carga, refinamento de latência, reconexão com placar e monitoramento continuam pendentes. Vercel estática publica apenas o frontend.
 
-Atualize frontend e servidor juntos: handshake, snapshots e `/health` usam **protocolo 5**. Versões incompatíveis são rejeitadas. A origem das regras está em `src/game/`, com tipos e validação em `src/network/protocol.ts`.
+Atualize frontend e servidor juntos: handshake, snapshots e `/health` usam **protocolo 6**. Versões incompatíveis são rejeitadas. O protocolo inclui configuração de loadout e identidade da arma no ator/inventário/itens largados. A origem das regras está em `src/game/`, com tipos e validação em `src/network/protocol.ts`.

@@ -1,0 +1,37 @@
+#scope-reticle {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at center,
+    transparent 0 29vh,
+    #050806a6 29.4vh,
+    #050806ed 30vh
+  );
+}
+#scope-reticle i,
+#scope-reticle b {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #102014cc;
+  transform: translate(-50%, -50%);
+}
+#scope-reticle i {
+  width: 58vh;
+  height: 1px;
+}
+#scope-reticle b {
+  height: 58vh;
+  width: 1px;
+}
+#scope-reticle span {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 21vh);
+  transform: translateX(-50%);
+  font: 9px monospace;
+  letter-spacing: 3px;
+  color: #718a73;
+}

@@ -59,10 +59,13 @@ export function createUrbanWorld(scene: Scene, definition: MapDefinition): World
       `quarter-${name}-original`,
       128,
       scene,
-      false,
+      true,
       Texture.NEAREST_SAMPLINGMODE,
     );
     const context = texture.getContext();
+    texture.wrapU = Texture.WRAP_ADDRESSMODE;
+    texture.wrapV = Texture.WRAP_ADDRESSMODE;
+    texture.updateSamplingMode(Texture.TRILINEAR_SAMPLINGMODE);
     context.fillStyle = '#bcbab2';
     context.fillRect(0, 0, 128, 128);
     for (let i = 0; i < 1800; i++) {

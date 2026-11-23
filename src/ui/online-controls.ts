@@ -1,6 +1,7 @@
 import type { ChatMessage } from '../network/connection';
 import type { MatchState } from '../network/protocol';
 import { normalizeMatchConfig, type MatchConfig } from '../game/match-config';
+import { MAP_CATALOG } from '../game/map-catalog';
 import './online-controls.css';
 
 /** Room tools use real transport callbacks; no messages or players are simulated. */
@@ -32,7 +33,7 @@ export function mountOnlineControls(hooks: {
     <div id="online-host-overlay" class="overlay" hidden>
       <form id="online-host-form" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="online-host-title">
         <h2 id="online-host-title">CONFIGURAÇÕES DO ANFITRIÃO</h2>
-        <label class="setting-row">Mapa<select name="map"><option value="industrial">Complexo Ferro</option><option value="old-quarter">Bairro Antigo</option></select></label>
+        <label class="setting-row">Mapa<select name="map">${MAP_CATALOG.map((map) => `<option value="${map.id}">${map.name}</option>`).join('')}</select></label>
         <label class="setting-row">Modo<select name="mode"><option value="deathmatch">Combate livre</option><option value="team-deathmatch">Combate em equipes</option><option value="defuse">Bomba</option></select></label>
         <label class="setting-row">Bots<input type="number" name="bots" min="0" max="4" required></label>
         <label class="setting-row">Dificuldade<select name="difficulty"><option value="easy">Fácil</option><option value="normal">Normal</option><option value="hard">Difícil</option></select></label>

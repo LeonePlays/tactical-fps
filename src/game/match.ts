@@ -24,7 +24,7 @@ import {
   type DroppedItemState,
 } from '../network/protocol';
 import { WeaponController } from './weapons';
-import { seedFor } from './ballistics';
+import { seedFor, GUNS, weaponDamage, type WeaponId } from './ballistics';
 import { buy, damageWithArmor } from './shop';
 interface Actor {
   name: string;
@@ -90,7 +90,11 @@ export class Match {
     a.body = new PlayerBody(this.map.solids, position);
     a.health = 100;
     a.armor = 0;
-    a.gun = new WeaponController(seedFor(a.id) + a.deaths, this.mode !== 'defuse' || a.bot);
+    a.gun = new WeaponController(
+      seedFor(a.id) + a.deaths,
+      this.mode !== 'defuse' || a.bot,
+      this.actorLoadout(a.id, a.bot),
+    );
     a.gun.resetTrigger(a.input.fireSequence);
     a.equipment.reset(a.input.fireSequence);
     a.input = {
@@ -109,6 +113,16 @@ export class Match {
     a.lastInput = this.time;
     a.aiState = 'patrol';
     a.interactHeld = false;
+  }
+  private actorLoadout(id: string, bot: boolean) {
+    if (!bot) return { primary: this.config.primary, secondary: this.config.secondary };
+    const primary: WeaponId[] = ['t04', 'ar47', 'smg9', 'dmr14', 'sg12', 'sr8', 'lmg60'];
+    const secondary: WeaponId[] = ['p09', 'p45', 'p22'];
+    const seed = seedFor(id);
+    return {
+      primary: primary[seed % primary.length],
+      secondary: secondary[seed % secondary.length],
+    };
   }
   setMatchId(epoch: number): void {
     if (Number.isSafeInteger(epoch) && epoch > 0) this.matchId = epoch;
@@ -175,7 +189,11 @@ export class Match {
     const spawnSlot = available.find(safe) ?? free.find(safe) ?? available[0] ?? free[0];
     const spawn = { ...this.map.spawns[spawnSlot] },
       body = new PlayerBody(this.map.solids, spawn),
-      gun = new WeaponController(seedFor(id), this.mode !== 'defuse' || bot);
+      gun = new WeaponController(
+        seedFor(id),
+        this.mode !== 'defuse' || bot,
+        this.actorLoadout(id, bot),
+      );
     this.actors.set(id, {
       id,
       name: playerName(
@@ -248,7 +266,7 @@ export class Match {
       this.rounds.dropBomb(a.id, a.body.position);
       return;
     }
-    let contents: Pick<DroppedItemState, 'ammo' | 'reserve'> = {};
+    let contents: Pick<DroppedItemState, 'ammo' | 'reserve' | 'weaponId'> = {};
     let kind: DroppedItemState['kind'];
     if (a.input.tool === 'grenade') {
       if (!a.equipment.dropGrenade(a.input.grenadeSlot)) return;
@@ -304,7 +322,7 @@ export class Match {
           ? a.equipment.addGrenade()
           : a.gun.pickup(
               item.kind,
-              { ammo: item.ammo ?? 0, reserve: item.reserve ?? 0 },
+              { ammo: item.ammo ?? 0, reserve: item.reserve ?? 0, weaponId: item.weaponId },
               this.time,
             );
       if (!picked) continue;
@@ -400,13 +418,17 @@ export class Match {
         });
         a.aiState = decision.state;
         a.botShotInterval = decision.shotInterval;
+        const fire = decision.fire && this.time >= a.nextBotShot;
+        const fireSequence = a.input.fireSequence + Number(fire);
+        if (fire) a.nextBotShot = this.time + Math.max(a.botShotInterval, a.gun.spec.interval);
         a.input = {
           ...IDLE_INPUT,
           yaw: decision.yaw - a.gun.recoil.yaw * decision.recoilControl,
           pitch: decision.pitch - a.gun.recoil.pitch * decision.recoilControl,
           forward: decision.forward,
           right: decision.right,
-          fire: decision.fire && this.time >= a.nextBotShot,
+          fire,
+          fireSequence,
           weapon: 'primary',
         };
       } else if (a.bot) {
@@ -446,7 +468,7 @@ export class Match {
       );
       if (a.input.buyItem && a.input.buySequence > a.buySequence) {
         a.buySequence = a.input.buySequence;
-        a.buyMessage = buy(a.gun, a, a.input.buyItem, this.canBuy(a), a.equipment);
+        a.buyMessage = buy(a.gun, a, a.input.buyItem, this.canBuy(a), a.equipment, this.time);
       }
       const dropPressed = a.input.dropSequence > a.dropSequence;
       a.dropSequence = Math.max(a.dropSequence, a.input.dropSequence);
@@ -524,27 +546,30 @@ export class Match {
       });
       if (!shot) continue;
       a.shots++;
-      if (a.bot) a.nextBotShot = this.time + a.botShotInterval;
-      const dir = shot.direction;
-      let nearest = Math.min(...this.map.solids.map((s) => rayBox(origin, dir, s))),
-        victim: Actor | undefined;
-      for (const b of this.actors.values()) {
-        if (b === a || b.health <= 0 || (this.mode !== 'deathmatch' && a.team === b.team)) continue;
-        const p = b.body.position;
-        const distance = rayBox(
-          origin,
-          dir,
-          box(p.x, p.y + b.body.height / 2, p.z, 0.65, b.body.height, 0.65),
-        );
-        if (distance < nearest) {
-          nearest = distance;
-          victim = b;
+      let hit = false;
+      for (const dir of shot.directions) {
+        let nearest = Math.min(shot.range, ...this.map.solids.map((s) => rayBox(origin, dir, s))),
+          victim: Actor | undefined;
+        for (const b of this.actors.values()) {
+          if (b === a || b.health <= 0 || (this.mode !== 'deathmatch' && a.team === b.team))
+            continue;
+          const p = b.body.position;
+          const distance = rayBox(
+            origin,
+            dir,
+            box(p.x, p.y + b.body.height / 2, p.z, 0.65, b.body.height, 0.65),
+          );
+          if (distance < nearest) {
+            nearest = distance;
+            victim = b;
+          }
+        }
+        if (victim) {
+          hit = true;
+          this.hurt(a, victim, weaponDamage(GUNS[shot.weaponId], nearest));
         }
       }
-      if (victim) {
-        a.hits++;
-        this.hurt(a, victim, shot.damage);
-      }
+      if (hit) a.hits++;
     }
     if (combat)
       for (const grenade of this.projectiles) {
@@ -641,6 +666,7 @@ export class Match {
       hits: a.hits,
       ammo: a.gun.ammo,
       weapon: a.gun.slot,
+      weaponId: a.gun.weaponId,
     }));
   }
 }

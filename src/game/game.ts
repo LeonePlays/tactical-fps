@@ -2,7 +2,9 @@ import { createActor, type ActorModel } from './actors';
 import type { MatchInput, MatchState, DroppedItemState } from '../network/protocol';
 import { createBombView } from './bomb-view';
 import { SpotLight } from '@babylonjs/core/Lights/spotLight';
-import { seedFor, shotDirection, spreadFor, type WeaponSlot } from './ballistics';
+import { seedFor, shotDirection, spreadFor, type WeaponId, type WeaponSlot } from './ballistics';
+import type { MatchConfig } from './match-config';
+import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration';
 import {
   EquipmentInventory,
   blastHits,
@@ -54,6 +56,12 @@ import { createWeapon, animateWeapon } from './weapon';
 import type { Settings } from '../core/settings';
 
 export interface GameSnapshot {
+  weaponId: WeaponId;
+  primaryId: WeaponId;
+  secondaryId: WeaponId;
+  primaryMagazineSize: number;
+  secondaryMagazineSize: number;
+  scoped: boolean;
   aiming: boolean;
   flashlight: boolean;
   equipmentSlot: number;
@@ -109,6 +117,10 @@ export class Game {
   private flashlightOn = false;
   private aimHeld = false;
   private aimBlend = 0;
+  private locomotionPhase = 0;
+  private landingKick = 0;
+  private swayX = 0;
+  private swayY = 0;
   private grenadeSlot: 0 | 1 = 0;
   private hasBomb = false;
   private dropSequence = 0;
@@ -195,11 +207,16 @@ export class Game {
     this.settings = { ...settings };
     this.engine = new Engine(
       canvas,
-      false,
+      true,
       { stencil: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' },
       false,
     );
     this.scene = new Scene(this.engine);
+    this.scene.imageProcessingConfiguration.toneMappingEnabled = true;
+    this.scene.imageProcessingConfiguration.toneMappingType =
+      ImageProcessingConfiguration.TONEMAPPING_ACES;
+    this.scene.imageProcessingConfiguration.exposure = 1.12;
+    this.scene.imageProcessingConfiguration.contrast = 1.08;
     this.scene.skipPointerMovePicking = true;
     this.camera = new UniversalCamera('player-camera', new Vector3(0, 1.62, -22), this.scene);
     this.camera.inputs.clear();
@@ -276,6 +293,8 @@ export class Game {
         this.yaw += event.movementX * sensitivity;
         this.pitch += event.movementY * sensitivity * (this.settings.invertY ? -1 : 1);
         this.pitch = Math.max(-1.48, Math.min(1.48, this.pitch));
+        this.swayX = Math.max(-0.025, Math.min(0.025, this.swayX - event.movementX * 0.00015));
+        this.swayY = Math.max(-0.02, Math.min(0.02, this.swayY + event.movementY * 0.00012));
       },
       options,
     );
@@ -470,7 +489,7 @@ export class Game {
     this.elapsed = 0;
     this.previousPosition = undefined;
     this.cameraCorrection.setAll(0);
-    this.gun = new WeaponController();
+    this.gun = new WeaponController(1, true, this.gun.loadout);
     this.equipment.reset(this.fireSequence);
     this.trainingDrops = [];
     this.syncDroppedItems([]);
@@ -498,6 +517,22 @@ export class Game {
     }
     this.world.shadows.getShadowMap()?.resetRefreshCounter();
     this.syncCamera(1);
+    this.emitSnapshot();
+  }
+
+  configureLoadout(config: Partial<MatchConfig>): void {
+    if (
+      this.online ||
+      (this.gun.loadout.primary === config.primary &&
+        this.gun.loadout.secondary === config.secondary)
+    )
+      return;
+    this.gun = new WeaponController(1, true, config);
+    this.gun.resetTrigger(this.fireSequence);
+    this.tool = 'firearm';
+    this.trigger = false;
+    this.aimHeld = false;
+    this.replaceWeapon();
     this.emitSnapshot();
   }
 
@@ -818,7 +853,7 @@ export class Game {
           ? this.equipment.addGrenade()
           : this.gun.pickup(
               item.kind,
-              { ammo: item.ammo ?? 0, reserve: item.reserve ?? 0 },
+              { ammo: item.ammo ?? 0, reserve: item.reserve ?? 0, weaponId: item.weaponId },
               this.elapsed,
             );
       if (!picked) continue;
@@ -835,7 +870,7 @@ export class Game {
       const model =
         item.kind === 'grenade'
           ? this.createGrenadeMesh(item.position)
-          : createWeapon(this.scene, this.camera, item.kind === 'secondary');
+          : createWeapon(this.scene, this.camera, item.kind === 'secondary', item.weaponId);
       model.parent = null;
       model.position.set(item.position.x, item.position.y, item.position.z);
       model.rotation.set(0, 0, Math.PI / 2);
@@ -862,7 +897,7 @@ export class Game {
     this.weapon.dispose();
     this.weapon =
       this.tool === 'firearm'
-        ? createWeapon(this.scene, this.camera, this.slot === 'secondary')
+        ? createWeapon(this.scene, this.camera, this.slot === 'secondary', this.gun.weaponId)
         : this.tool === 'bomb'
           ? createBombView(this.scene, this.camera)
           : createEquipmentView(this.scene, this.camera, this.tool);
@@ -903,10 +938,20 @@ export class Game {
   }
 
   private purchase(item: BuyItem): void {
+    const before = this.gun.weaponId;
     this.purchaseSequence++;
     this.purchaseItem = item;
     if (this.online) this.buyMessage = 'Aguardando confirmação da compra…';
-    else this.buyMessage = buy(this.gun, this.wallet, item, this.buyAllowed, this.equipment);
+    else
+      this.buyMessage = buy(
+        this.gun,
+        this.wallet,
+        item,
+        this.buyAllowed,
+        this.equipment,
+        this.elapsed,
+      );
+    if (before !== this.gun.weaponId && this.tool === 'firearm') this.replaceWeapon();
     this.emitSnapshot();
   }
 
@@ -948,35 +993,31 @@ export class Game {
     this.shots++;
     this.flashUntil = this.elapsed + 0.045;
     this.recoil = 1;
-    this.audio.play('shot', this.slot);
-    const direction = new Vector3(shot.direction.x, shot.direction.y, shot.direction.z);
+    this.audio.play('shot', this.slot, 1, 0, this.gun.weaponId);
     const eye = new Vector3(
       this.body.position.x,
       this.body.position.y + this.body.eyeHeight,
       this.body.position.z,
     );
-    const ray = new Ray(eye, direction, 100);
-    const picked = this.scene.pickWithRay(
-      ray,
-      (mesh) => mesh.isEnabled() && mesh.isPickable && mesh.isVisible,
-    );
-    const id = getTargetId(picked?.pickedMesh ?? null);
-    if (id !== undefined && !this.online) {
-      const target = this.world.targets[id];
-      if (target.downUntil === 0) {
-        target.downUntil = this.elapsed + 4;
-        target.parts.forEach((part) => part.setEnabled(false));
-        this.world.shadows.getShadowMap()?.resetRefreshCounter();
-        this.hits++;
-        this.hitUntil = this.elapsed + 0.2;
-        this.audio.play('hit');
-      }
-    } else if (picked?.hit && picked.pickedPoint && picked.pickedMesh?.isVisible) {
-      const normal = picked.getNormal(true);
-      if (normal) {
-        this.impacts.add(picked.pickedPoint, normal, this.elapsed);
-        this.impactCount++;
-        this.audio.play('impact');
+    for (const pellet of shot.directions) {
+      const direction = new Vector3(pellet.x, pellet.y, pellet.z);
+      const ray = new Ray(eye, direction, shot.range);
+      const picked = this.scene.pickWithRay(
+        ray,
+        (mesh) => mesh.isEnabled() && mesh.isPickable && mesh.isVisible,
+      );
+      const id = getTargetId(picked?.pickedMesh ?? null);
+      if (id !== undefined && !this.online) {
+        const target = this.world.targets[id];
+        // Paper targets score a contact; live actors use the shared damage model in Match.
+        if (target.downUntil === 0) this.damageTrainingTarget(String(id), 100);
+      } else if (picked?.hit && picked.pickedPoint && picked.pickedMesh?.isVisible) {
+        const normal = picked.getNormal(true);
+        if (normal) {
+          this.impacts.add(picked.pickedPoint, normal, this.elapsed);
+          this.impactCount++;
+          this.audio.play('impact');
+        }
       }
     }
     this.emitSnapshot();
@@ -1034,7 +1075,11 @@ export class Game {
       this.audio.play('step');
       this.stepDistance = 0;
     }
-    if (!wasGrounded && this.body.grounded) this.audio.play('land');
+    this.locomotionPhase += this.body.speed * dt * 2.25;
+    if (!wasGrounded && this.body.grounded) {
+      this.audio.play('land');
+      this.landingKick = Math.min(0.06, Math.abs(this.body.velocityY) * 0.006 + 0.025);
+    }
     if (!this.online) {
       const validDrops = this.trainingDrops.filter((item) => item.expiresAt > this.elapsed);
       if (validDrops.length !== this.trainingDrops.length) {
@@ -1063,7 +1108,14 @@ export class Game {
   private frame(): void {
     const dt = Math.min(this.engine.getDeltaTime() / 1000, 0.25);
     this.aimBlend += (Number(this.aiming) - this.aimBlend) * (1 - Math.exp(-18 * dt));
-    this.camera.fov = (this.settings.fov * (1 - this.aimBlend * 0.28) * Math.PI) / 180;
+    this.camera.fov =
+      ((this.settings.fov * (1 - this.aimBlend * (1 - this.gun.spec.zoom)) +
+        (this.body.sprinting ? 2 : 0) * (1 - this.aimBlend)) *
+        Math.PI) /
+      180;
+    this.swayX *= Math.exp(-12 * dt);
+    this.swayY *= Math.exp(-12 * dt);
+    this.landingKick *= Math.exp(-12 * dt);
     this.flashlight.setEnabled(this.active && this.flashlightOn && this.matchHealth > 0);
     if (this.flashlight.isEnabled()) {
       const direction = shotDirection(this.yaw, this.pitch, 0, 0);
@@ -1080,20 +1132,23 @@ export class Game {
       this.muzzleFlash?.setEnabled(this.elapsed < this.flashUntil);
       const bob =
         this.body.moving && this.body.grounded
-          ? Math.sin(this.elapsed * (this.body.sprinting ? 15 : 10)) * 0.006
+          ? Math.sin(this.locomotionPhase) *
+            (this.body.sprinting ? 0.009 : 0.004) *
+            (1 - this.aimBlend * 0.85)
           : 0;
       const reloading = this.tool === 'firearm' && this.gun.reloading;
       const ws = this.gun.snapshot(this.elapsed);
-      const reloadDuration = this.slot === 'primary' ? 2.45 : 2.2;
+      const reloadDuration = this.gun.spec.reload;
       const reloadProgress = reloading ? 1 - ws.reloadRemaining / reloadDuration : 0;
       const reloadDip = reloading ? Math.sin(Math.min(1, reloadProgress) * Math.PI) : 0;
       const deploying = this.elapsed < this.toolReady || ws.deployRemaining > 0;
       const deployDip = deploying
         ? Math.min(0.3, Math.max(this.toolReady - this.elapsed, ws.deployRemaining) * 0.32)
         : 0;
-      this.weapon.position.y = -0.24 + bob - reloadDip * 0.16 - deployDip;
+      this.weapon.position.y =
+        -0.24 + bob - reloadDip * 0.16 - deployDip - this.landingKick + this.swayY;
       this.weapon.position.z = 0.55 - this.recoil * (this.tool === 'knife' ? -0.16 : 0.035);
-      this.weapon.position.x = 0.23 * (1 - this.aimBlend);
+      this.weapon.position.x = 0.23 * (1 - this.aimBlend) + this.swayX * (1 - this.aimBlend * 0.8);
       this.weapon.position.y += this.aimBlend * 0.08;
       this.weapon.rotation.x =
         -this.recoil * (this.tool === 'knife' ? 0.75 : 0.07) - reloadDip * 0.5 + deployDip;
@@ -1104,6 +1159,7 @@ export class Game {
       else animateEquipmentView(this.weapon, this.elapsed, this.recoil);
       this.weapon.setEnabled(
         this.hasStarted &&
+          !(this.aiming && this.gun.spec.zoom <= 0.5) &&
           (this.tool === 'firearm'
             ? this.gun.inventory[this.slot].owned
             : this.tool === 'grenade'
@@ -1208,7 +1264,11 @@ export class Game {
         this.purchaseSequence = Math.max(this.purchaseSequence, own.commandSequences.buy);
         this.dropSequence = Math.max(this.dropSequence, own.commandSequences.drop);
       }
-      this.gun = new WeaponController(seedFor(own.id) + own.deaths);
+      this.gun = new WeaponController(
+        seedFor(own.id) + own.deaths,
+        own.weapon === 'primary',
+        state.config,
+      );
       this.gun.slot = own.weapon;
       this.gun.resetTrigger(this.fireSequence);
       this.equipment.reset(this.fireSequence);
@@ -1228,12 +1288,14 @@ export class Game {
     this.hasBomb =
       state.rounds.bomb?.status === 'carried' && state.rounds.bomb.carrierId === state.self;
     this.syncDroppedItems(state.droppedItems ?? []);
+    const renderedWeapon = this.gun.weaponId;
     if (own.weapon === this.slot) this.gun.reconcile(own.weaponState, this.elapsed);
     else
       this.gun.inventory = {
         primary: { ...own.weaponState.inventory.primary },
         secondary: { ...own.weaponState.inventory.secondary },
       };
+    if (renderedWeapon !== this.gun.weaponId && this.tool === 'firearm') this.replaceWeapon();
     if (
       (this.tool === 'firearm' && !this.gun.inventory[this.slot].owned) ||
       (this.tool === 'bomb' && !this.hasBomb)
@@ -1303,7 +1365,13 @@ export class Game {
           actor.shots > previous.shots &&
           canHearPosition(this.world.solids, own.position, actor.position)
         )
-          this.audio.play('shot', actor.weapon, gain, pan);
+          this.audio.play(
+            'shot',
+            actor.weapon,
+            gain,
+            pan,
+            actor.weaponState.inventory[actor.weapon].weaponId,
+          );
         previous.footsteps += Math.hypot(
           actor.position.x - previous.position.x,
           actor.position.z - previous.position.z,
@@ -1350,6 +1418,12 @@ export class Game {
 
   private emitSnapshot(): void {
     this.events.onSnapshot({
+      weaponId: this.gun.weaponId,
+      primaryId: this.gun.loadout.primary,
+      secondaryId: this.gun.loadout.secondary,
+      primaryMagazineSize: this.gun.specForSlot('primary').capacity,
+      secondaryMagazineSize: this.gun.specForSlot('secondary').capacity,
+      scoped: this.aiming && this.gun.spec.zoom <= 0.5,
       aiming: this.aiming,
       flashlight: this.flashlightOn,
       equipmentSlot: this.equipmentSlot,
@@ -1382,15 +1456,16 @@ export class Game {
         this.elapsed < this.toolReady ||
         (this.tool === 'firearm' && this.gun.isDeploying(this.elapsed)),
       speed: this.body.speed,
-      spread: spreadFor(
-        {
-          speed: this.body.speed,
-          grounded: this.body.grounded,
-          stance: this.body.stance,
-          aiming: this.aiming,
-        },
-        this.gun.burst,
-      ),
+      spread:
+        spreadFor(
+          {
+            speed: this.body.speed,
+            grounded: this.body.grounded,
+            stance: this.body.stance,
+            aiming: this.aiming,
+          },
+          this.gun.burst,
+        ) * this.gun.spec.spread,
       impacts: this.impactCount,
       radarSolids: this.world.solids,
       contacts: this.contacts,

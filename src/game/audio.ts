@@ -1,4 +1,4 @@
-import type { WeaponSlot } from './ballistics';
+import { GUNS, type WeaponId, type WeaponSlot } from './ballistics';
 type Effect =
   | 'shot'
   | 'hit'
@@ -79,10 +79,18 @@ export class GameAudio {
       /* Sound is optional. */
     }
   }
-  play(kind: Effect, weapon: WeaponSlot = 'primary', distanceGain = 1, pan = 0) {
+  play(
+    kind: Effect,
+    weapon: WeaponSlot = 'primary',
+    distanceGain = 1,
+    pan = 0,
+    weaponId?: WeaponId,
+  ) {
     const ctx = this.context;
     const mix = this.volume * this.effectsVolume * Math.max(0, Math.min(1, distanceGain));
     if (!ctx || ctx.state !== 'running' || mix === 0) return;
+    const spec = GUNS[weaponId ?? (weapon === 'primary' ? 't04' : 'p09')];
+    const heavy = spec.kind === 'sniper' || spec.kind === 'shotgun' || spec.kind === 'heavy-pistol';
     const connect = (node: AudioNode) => {
       if (pan === 0 || !ctx.createStereoPanner) {
         node.connect(ctx.destination);
@@ -96,7 +104,7 @@ export class GameAudio {
     };
     const time = ctx.currentTime;
     const duration = {
-      shot: 0.19,
+      shot: heavy ? 0.3 : spec.kind === 'smg' ? 0.13 : 0.19,
       hit: 0.1,
       reload: 0.13,
       step: 0.085,
@@ -123,9 +131,13 @@ export class GameAudio {
               : kind === 'deploy'
                 ? 2100
                 : kind === 'shot'
-                  ? weapon === 'primary'
-                    ? 5200
-                    : 6500
+                  ? heavy
+                    ? 3400
+                    : spec.kind === 'smg'
+                      ? 7200
+                      : weapon === 'primary'
+                        ? 5200
+                        : 6500
                   : kind === 'step'
                     ? 350 + (this.foot++ % 2) * 65
                     : kind === 'reload'
@@ -167,7 +179,17 @@ export class GameAudio {
         gain = ctx.createGain();
       tone.type = kind === 'shot' ? 'triangle' : 'sine';
       tone.frequency.setValueAtTime(
-        kind === 'hit' ? 1000 : kind === 'explosion' ? 75 : weapon === 'primary' ? 110 : 190,
+        kind === 'hit'
+          ? 1000
+          : kind === 'explosion'
+            ? 75
+            : heavy
+              ? 85
+              : spec.kind === 'smg'
+                ? 160
+                : weapon === 'primary'
+                  ? 110
+                  : 190,
         time,
       );
       tone.frequency.exponentialRampToValueAtTime(kind === 'hit' ? 400 : 40, time + duration);

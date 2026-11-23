@@ -5,17 +5,17 @@ export async function accountFixture(
   authenticated = true,
   playerId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
 ) {
-  if (!authenticated)
-    await page.addInitScript(
-      ({ key, settings }) => {
-        // Auth assertions do not require full-resolution background rendering.
-        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(settings));
-      },
-      {
-        key: SETTINGS_KEY,
-        settings: { ...DEFAULT_SETTINGS, quality: 'low', shadows: 'off', renderScale: 0.5 },
-      },
-    );
+  await page.addInitScript(
+    ({ key, settings }) => {
+      // Functional UI/network checks use modest software-rendering cost.
+      // The content visual scenario separately exercises higher graphics and shadows.
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(settings));
+    },
+    {
+      key: SETTINGS_KEY,
+      settings: { ...DEFAULT_SETTINGS, quality: 'low', shadows: 'off', renderScale: 0.5 },
+    },
+  );
   const user = {
     id: playerId,
     aud: 'authenticated',
